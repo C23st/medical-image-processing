@@ -25,12 +25,14 @@ class ParamsPanel(QTabWidget):
     window_changed = Signal(float, float)  # (window, level)
     enhance_apply = Signal(str, dict)      # (method_key, params)
     enhance_reset = Signal()
+    segment_apply = Signal(str, dict)      # (method_key, params)
+    segment_clear = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._build_display_tab()
         self._build_enhance_tab()
-        self._build_placeholder_tab("分割", "阈值分割 / 区域生长 / Otsu\n(将在 P4 阶段实现)")
+        self._build_segmentation_tab()
         self._build_placeholder_tab("三维重建", "面绘制 (Marching Cubes) + 体绘制\n(将在 P5 阶段实现)")
 
     # ---- 显示页 ----
@@ -159,6 +161,61 @@ class ParamsPanel(QTabWidget):
         elif key == "sharpen":
             params["amount"] = self.amount_spin.value()
         self.enhance_apply.emit(key, params)
+
+    # ---- 分割页 ----
+    def _build_segmentation_tab(self):
+        tab = QWidget()
+        self.addTab(tab, "分割")
+        layout = QVBoxLayout(tab)
+
+        box = QGroupBox("分割方法")
+        form = QFormLayout(box)
+        self.seg_combo = QComboBox()
+        self.seg_combo.addItem("阈值分割", "threshold")
+        self.seg_combo.addItem("Otsu 自动阈值", "otsu")
+        self.seg_combo.addItem("区域生长", "region_growing")
+        form.addRow("方法", self.seg_combo)
+
+        self.thresh_spin = QDoubleSpinBox()
+        self.thresh_spin.setRange(-2000.0, 3000.0)
+        self.thresh_spin.setValue(100.0)
+        self.thresh_spin.setSingleStep(10.0)
+        form.addRow("阈值 (HU)", self.thresh_spin)
+
+        self.tol_spin = QDoubleSpinBox()
+        self.tol_spin.setRange(1.0, 300.0)
+        self.tol_spin.setValue(30.0)
+        self.tol_spin.setSingleStep(5.0)
+        form.addRow("生长容差 (HU)", self.tol_spin)
+        layout.addWidget(box)
+
+        hint = QLabel(
+            "阈值分割: 保留强度 >= 阈值的体素\n"
+            "Otsu: 自动计算全局阈值\n"
+            "区域生长: 先在切片视图点击设置种子点, 再应用"
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #9aa0a6;")
+        layout.addWidget(hint)
+
+        self.seg_apply_btn = QPushButton("应用分割")
+        self.seg_clear_btn = QPushButton("清除分割")
+        btn_row = QHBoxLayout()
+        btn_row.addWidget(self.seg_apply_btn)
+        btn_row.addWidget(self.seg_clear_btn)
+        layout.addLayout(btn_row)
+        layout.addStretch(1)
+
+        self.seg_apply_btn.clicked.connect(self._emit_segment_apply)
+        self.seg_clear_btn.clicked.connect(self.segment_clear)
+
+    def _emit_segment_apply(self):
+        key = self.seg_combo.currentData()
+        params = {
+            "threshold": self.thresh_spin.value(),
+            "tol": self.tol_spin.value(),
+        }
+        self.segment_apply.emit(key, params)
 
     # ---- 占位页 ----
     def _build_placeholder_tab(self, title, text):

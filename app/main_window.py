@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-from .core import VolumeData, enhance
+from .core import VolumeData, enhance, segment
 from .core.dicom_loader import load_dicom_series
 from .core.synthetic import synthetic_ct_phantom
 from .views.four_view import FourViewWidget
@@ -27,6 +27,8 @@ class MainWindow(QMainWindow):
         self.resize(1400, 900)
         self._volume = None
         self._base_volume = None
+        self._mask = None
+        self._seed = None
         self.volumes = []
 
         self._build_central()
@@ -41,6 +43,9 @@ class MainWindow(QMainWindow):
     def _build_central(self):
         self.four_view = FourViewWidget()
         self.setCentralWidget(self.four_view)
+        for view in self.four_view.slice_views():
+            view.slice_changed.connect(lambda *_: self._update_info_slices())
+            view.picked.connect(self._on_picked)
 
     def _build_docks(self):
         self.tree = DataTreeWidget()
@@ -66,6 +71,8 @@ class MainWindow(QMainWindow):
         self.tree.series_selected.connect(self._on_series_selected)
         self.params.enhance_apply.connect(self._on_enhance_apply)
         self.params.enhance_reset.connect(self._on_enhance_reset)
+        self.params.segment_apply.connect(self._on_segment_apply)
+        self.params.segment_clear.connect(self._on_segment_clear)
 
     def _build_menus(self):
         menubar = self.menuBar()
@@ -150,9 +157,7 @@ class MainWindow(QMainWindow):
 
     def set_volume(self, volume):
         self._volume = volume
-        image = volume.to_vtk_image()
-
-        self.four_view.set_image(image)
+        self.four_view.set_volume(volume)
         self.info.set_patient(volume)
         self.params.set_window_level(volume.window, volume.level)
         self._on_window_level(volume.window, volume.level)
@@ -189,8 +194,11 @@ class MainWindow(QMainWindow):
             )
 
     def _activate_volume(self, volume):
-        """切换当前序列 (同时重置增强基准为原图)。"""
+        """切换当前序列 (重置增强基准与分割结果)。"""
         self._base_volume = volume
+        self._mask = None
+        self._seed = None
+        self.four_view.set_labelmap(None)
         self.set_volume(volume)
 
     def _on_enhance_apply(self, method, params):
@@ -216,6 +224,8 @@ class MainWindow(QMainWindow):
             series_description=f"{base.series_description} [{label}]",
         )
         self.set_volume(volume)
+        if self._mask is not None:
+            self.four_view.set_labelmap(self._mask)
         QApplication.restoreOverrideCursor()
         self.statusBar().showMessage(f"增强完成: {label}", 5000)
 
@@ -223,6 +233,78 @@ class MainWindow(QMainWindow):
         if self._base_volume is not None:
             self.set_volume(self._base_volume)
             self.statusBar().showMessage("已恢复原图", 3000)
+
+    # ---- 分割 ----
+    def _on_segment_apply(self, method, params):
+        if self._base_volume is None:
+            return
+        data = self._base_volume.data
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        self.statusBar().showMessage("分割处理中...")
+        extra = ""
+        try:
+            if method == "threshold":
+                mask = segment.threshold(data, params.get("threshold", 100.0))
+            elif method == "otsu":
+                mask, t = segment.otsu(data)
+                extra = f" (Otsu 阈值 {t:.1f} HU)"
+            elif method == "region_growing":
+                if self._seed is None:
+                    QApplication.restoreOverrideCursor()
+                    QMessageBox.information(
+                        self, "区域生长", "请先在切片视图上点击, 设置种子点后再应用。"
+                    )
+                    return
+                mask = segment.region_growing(
+                    data, self._seed, params.get("tol", 30.0)
+                )
+            else:
+                QApplication.restoreOverrideCursor()
+                return
+        except Exception as e:  # noqa: BLE001
+            QApplication.restoreOverrideCursor()
+            QMessageBox.warning(self, "分割", f"分割失败: {e}")
+            return
+
+        self._mask = mask
+        self.four_view.set_labelmap(mask)
+        dice_txt = self._compute_dice(mask)
+        QApplication.restoreOverrideCursor()
+        self.statusBar().showMessage(f"分割完成{extra}{dice_txt}", 5000)
+
+    def _on_segment_clear(self):
+        self._mask = None
+        self.four_view.set_labelmap(None)
+        self.statusBar().showMessage("已清除分割结果", 3000)
+
+    def _on_picked(self, z, y, x):
+        self._seed = (z, y, x)
+        if self._base_volume is not None:
+            val = float(self._base_volume.data[z, y, x])
+            self.info.set_value(f"{val:.1f}")
+        self.statusBar().showMessage(f"拾取点: 层{z}, y={y}, x={x}", 3000)
+
+    def _compute_dice(self, mask):
+        """与同病人 SEG 真值计算 Dice (有则返回提示文本)。"""
+        if self._base_volume is None:
+            return ""
+        pid = self._base_volume.patient.get("id")
+        seg_vol = next(
+            (
+                v
+                for v in self.volumes
+                if v.modality == "SEG" and v.patient.get("id") == pid
+            ),
+            None,
+        )
+        if seg_vol is None:
+            return ""
+        try:
+            gt = segment.match_seg_to_ct(seg_vol, self._base_volume)
+            d = segment.dice(mask, gt)
+        except Exception:  # noqa: BLE001
+            return ""
+        return f" | 与胰腺真值 Dice={d:.3f}"
 
     def _on_reset_view(self):
         self.four_view.render_all()

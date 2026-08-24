@@ -20,6 +20,7 @@ class VolumeData:
         window=None,
         level=None,
         series_description="",
+        slice_positions=None,
     ):
         self.data = np.asarray(data)
         self.spacing = tuple(float(v) for v in spacing)
@@ -28,6 +29,7 @@ class VolumeData:
         self.modality = modality
         self.patient = patient or {}
         self.series_description = series_description
+        self.slice_positions = slice_positions
 
         if window is None or level is None:
             window, level = self._default_window_level()

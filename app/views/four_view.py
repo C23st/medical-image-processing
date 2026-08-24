@@ -27,11 +27,14 @@ class FourViewWidget(QWidget):
     def slice_views(self):
         return (self.axial, self.coronal, self.sagittal)
 
-    def set_image(self, image):
-        self.axial.set_image(image)
-        self.coronal.set_image(image)
-        self.sagittal.set_image(image)
-        self.view3d.set_image(image)
+    def set_volume(self, volume):
+        for view in self.slice_views():
+            view.set_volume_data(volume.data, volume.spacing)
+        self.view3d.set_image(volume.to_vtk_image())
+
+    def set_labelmap(self, mask):
+        for view in self.slice_views():
+            view.set_labelmap(mask)
 
     def render_all(self):
         for view in (self.axial, self.coronal, self.sagittal, self.view3d):

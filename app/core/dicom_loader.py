@@ -106,6 +106,7 @@ def _build_volume(items):
         sx, sy = _pixel_spacing(first)
         sz = float(_val(first, "SpacingBetweenSlices", 0) or _val(first, "SliceThickness", 0) or 1.0)
         origin = _position(first)
+        positions = _frame_positions(first, nframes)
     else:
         # 单帧: 每切片一个文件, 按沿法向位置排序
         def pos(ds):
@@ -131,6 +132,7 @@ def _build_volume(items):
             dz = float(_val(first, "SliceThickness", 1.0) or 1.0)
         sz = dz
         origin = _position(items[0])
+        positions = [_position(ds) for ds in items]
 
     window, level = _window_level(first)
     patient = {
@@ -151,7 +153,23 @@ def _build_volume(items):
         window=window,
         level=level,
         series_description=series_description,
+        slice_positions=np.asarray(positions, dtype=float) if positions is not None else None,
     )
+
+
+def _frame_positions(ds, nframes):
+    """读取多帧 SEG/增强对象的逐帧 ImagePositionPatient。"""
+    try:
+        fg = ds.PerFrameFunctionalGroupsSequence
+        positions = []
+        for fr in fg:
+            p = fr.PlanePositionSequence[0].ImagePositionPatient
+            positions.append([float(v) for v in p])
+        if len(positions) == nframes:
+            return positions
+    except Exception:
+        pass
+    return None
 
 
 def _pixel_spacing(ds):
