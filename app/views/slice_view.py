@@ -79,22 +79,6 @@ def to_vtk_2d(arr2d, sp, ncomp=1):
     return img
 
 
-class _SliceStyle(vtk.vtkInteractorStyleImage):
-    """定制交互: 滚轮翻层, 左键拾取种子点。"""
-
-    def __init__(self, owner):
-        self._owner = owner
-
-    def OnMouseWheelForward(self):
-        self._owner._nudge_slice(1)
-
-    def OnMouseWheelBackward(self):
-        self._owner._nudge_slice(-1)
-
-    def OnLeftButtonDown(self):
-        self._owner._pick_seed()
-
-
 class SliceViewWidget(QWidget):
     AXIAL = AXIAL
     CORONAL = CORONAL
@@ -124,7 +108,13 @@ class SliceViewWidget(QWidget):
         self.vtk_widget.GetRenderWindow().AddRenderer(self.renderer)
 
         self._interactor = self.vtk_widget.GetRenderWindow().GetInteractor()
-        self._interactor.SetInteractorStyle(_SliceStyle(self))
+        self._style = vtk.vtkInteractorStyleImage()
+        self._interactor.SetInteractorStyle(self._style)
+        # 自定义交互: 左键拾取种子点, 滚轮翻层。
+        # 观察者优先级(1.0)高于默认样式(0.0), 返回 "AbortFlagOn" 阻止默认行为。
+        self._interactor.AddObserver("LeftButtonPressEvent", self._on_left_press, 1.0)
+        self._interactor.AddObserver("MouseWheelForwardEvent", self._on_wheel_forward, 1.0)
+        self._interactor.AddObserver("MouseWheelBackwardEvent", self._on_wheel_backward, 1.0)
 
         self.image_actor = vtk.vtkImageActor()
         self.image_actor.GetProperty().SetInterpolationTypeToNearest()
@@ -220,22 +210,40 @@ class SliceViewWidget(QWidget):
     def render(self):
         self.vtk_widget.GetRenderWindow().Render()
 
+    # ---- 交互 ----
+    def _on_left_press(self, obj, event):
+        self._pick_seed()
+        return "AbortFlagOn"
+
+    def _on_wheel_forward(self, obj, event):
+        self._nudge_slice(1)
+        return "AbortFlagOn"
+
+    def _on_wheel_backward(self, obj, event):
+        self._nudge_slice(-1)
+        return "AbortFlagOn"
+
     # ---- 拾取 ----
     def _pick_seed(self):
         if self._data is None:
             return
-        xd, yd = self._interactor.GetEventPosition()
-        self.renderer.SetDisplayPoint(xd, yd, 0.0)
-        self.renderer.DisplayToWorld()
-        wx, wy, _wz, _w = self.renderer.GetWorldPoint()
+        try:
+            xd, yd = self._interactor.GetEventPosition()
+            self.renderer.SetDisplayPoint(xd, yd, 0.0)
+            self.renderer.DisplayToWorld()
+            wx, wy, _wz, _w = self.renderer.GetWorldPoint()
 
-        arr2d, _dims, sp = slice_array(
-            self._data, self._spacing, self.orientation, self._slice
-        )
-        rows, cols = arr2d.shape
-        col = int(round(wx / sp[0]))
-        row = int(round(wy / sp[1]))
-        row = max(0, min(rows - 1, row))
-        col = max(0, min(cols - 1, col))
-        z, y, x = volume_coords(self.orientation, self._slice, row, col)
-        self.picked.emit(int(z), int(y), int(x))
+            arr2d, _dims, sp = slice_array(
+                self._data, self._spacing, self.orientation, self._slice
+            )
+            rows, cols = arr2d.shape
+            col = int(round(wx / sp[0]))
+            row = int(round(wy / sp[1]))
+            row = max(0, min(rows - 1, row))
+            col = max(0, min(cols - 1, col))
+            z, y, x = volume_coords(self.orientation, self._slice, row, col)
+            self.picked.emit(int(z), int(y), int(x))
+        except Exception:  # noqa: BLE001
+            import traceback
+
+            traceback.print_exc()
