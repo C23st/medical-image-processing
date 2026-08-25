@@ -276,12 +276,20 @@ class MainWindow(QMainWindow):
 
         base = self._base_volume
         label = enhance.METHODS[method][0]
+        if enhance.preserves_range(method):
+            # 滤波类: 保持原始窗宽窗位 (HU 语义不变)
+            window, level = base.window, base.level
+        else:
+            # 归一化类: 自动按新数据范围 (通常变为 255/128)
+            window, level = None, None
         volume = VolumeData(
             data,
             spacing=base.spacing,
             origin=base.origin,
             modality=base.modality,
             patient=base.patient,
+            window=window,
+            level=level,
             series_description=f"{base.series_description} [{label}]",
         )
         self.set_volume(volume)

@@ -106,6 +106,14 @@ METHODS = {
 # 逐切片处理的方法 (滤波/CLAHE 保持 2D 语义且更快)
 _SLICE_WISE = {"clahe", "mean", "median", "gaussian", "sharpen"}
 
+# 保持原始灰度 (HU) 范围的方法: 增强后窗宽窗位应沿用原始值
+_PRESERVE_RANGE = {"mean", "median", "gaussian", "sharpen"}
+
+
+def preserves_range(method):
+    """该方法增强后是否保持原始灰度 (HU) 范围 (窗宽窗位沿用原值)。"""
+    return method in _PRESERVE_RANGE
+
 
 def apply(data, method, params=None):
     """对体数据 (z, y, x) 应用增强, 返回同形状 float32 数组。
