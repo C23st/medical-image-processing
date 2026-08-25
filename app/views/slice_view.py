@@ -168,18 +168,6 @@ class SliceViewWidget(QWidget):
     def get_slice(self):
         return self._slice
 
-    def slice_spacing(self):
-        """当前翻层方向的物理间距 (每翻一层移动的毫米数)。
-
-        Axial 沿 z, Coronal 沿 y, Sagittal 沿 x。
-        """
-        sx, sy, sz = self._spacing
-        if self.orientation == self.AXIAL:
-            return sz
-        if self.orientation == self.CORONAL:
-            return sy
-        return sx
-
     def set_slice(self, idx):
         lo, hi = self.slice_range()
         self._slice = int(max(lo, min(hi, idx)))

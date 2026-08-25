@@ -35,7 +35,6 @@ class MainWindow(QMainWindow):
         self._link = False
         self._processing_link = False
         self._last_slice = {}
-        self._link_remainder = {}
         self._link_action = None
 
         self._build_central()
@@ -196,18 +195,12 @@ class MainWindow(QMainWindow):
         delta = new_index - last
         if delta == 0:
             return
-        # 按物理距离联动: 其余视图移动与源视图相同的毫米数
-        src_spacing = view.slice_spacing()
         self._processing_link = True
         try:
             for other in self.four_view.slice_views():
                 if other is view:
                     continue
-                steps_f = delta * src_spacing / other.slice_spacing() + self._link_remainder.get(id(other), 0.0)
-                steps = int(round(steps_f))
-                self._link_remainder[id(other)] = steps_f - steps
-                if steps != 0:
-                    other.set_slice(other.get_slice() + steps)
+                other.set_slice(other.get_slice() + delta)
         finally:
             self._processing_link = False
 
@@ -215,7 +208,6 @@ class MainWindow(QMainWindow):
         self._link = bool(checked)
         if checked:
             self._last_slice = {id(v): v.get_slice() for v in self.four_view.slice_views()}
-            self._link_remainder = {}
         self.statusBar().showMessage(
             "切片联动已开启" if checked else "切片联动已关闭", 2000
         )
