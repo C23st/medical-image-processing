@@ -1,6 +1,8 @@
 """主窗口: 菜单栏 / 工具栏 / 四视图 / 数据树 / 参数面板 / 信息区。"""
 from __future__ import annotations
 
+from functools import partial
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
@@ -30,6 +32,10 @@ class MainWindow(QMainWindow):
         self._mask = None
         self._seed = None
         self.volumes = []
+        self._link = False
+        self._processing_link = False
+        self._last_slice = {}
+        self._link_action = None
 
         self._build_central()
         self._build_docks()
@@ -44,7 +50,7 @@ class MainWindow(QMainWindow):
         self.four_view = FourViewWidget()
         self.setCentralWidget(self.four_view)
         for view in self.four_view.slice_views():
-            view.slice_changed.connect(lambda *_: self._update_info_slices())
+            view.slice_changed.connect(partial(self._on_slice_changed, view))
             view.picked.connect(self._on_picked)
 
     def _build_docks(self):
@@ -94,6 +100,11 @@ class MainWindow(QMainWindow):
         act_reset = QAction("重置视图", self)
         act_reset.triggered.connect(self._on_reset_view)
         m_view.addAction(act_reset)
+        self._link_action = QAction("切片联动", self)
+        self._link_action.setCheckable(True)
+        self._link_action.setChecked(False)
+        self._link_action.toggled.connect(self._on_toggle_link)
+        m_view.addAction(self._link_action)
 
         # 功能占位菜单
         self._placeholder_menu(menubar, "分割(&S)")
@@ -126,6 +137,8 @@ class MainWindow(QMainWindow):
             return act
 
         add("打开", self._on_open)
+        tb.addSeparator()
+        tb.addAction(self._link_action)
         tb.addSeparator()
         add("窗宽窗位", None, False)
         add("缩放", None, False)
@@ -161,6 +174,7 @@ class MainWindow(QMainWindow):
         self.info.set_patient(volume)
         self.params.set_window_level(volume.window, volume.level)
         self._on_window_level(volume.window, volume.level)
+        self._last_slice = {id(v): v.get_slice() for v in self.four_view.slice_views()}
         self._update_info_slices()
         self.four_view.render_all()
 
@@ -170,6 +184,33 @@ class MainWindow(QMainWindow):
             _, hi = view.slice_range()
             parts.append(f"{view.label}: {view.get_slice()}/{hi}")
         self.info.set_slice(" | ".join(parts))
+
+    # ---- 切片联动 ----
+    def _on_slice_changed(self, view, new_index):
+        self._update_info_slices()
+        last = self._last_slice.get(id(view))
+        self._last_slice[id(view)] = new_index
+        if not self._link or self._processing_link or last is None:
+            return
+        delta = new_index - last
+        if delta == 0:
+            return
+        self._processing_link = True
+        try:
+            for other in self.four_view.slice_views():
+                if other is view:
+                    continue
+                other.set_slice(other.get_slice() + delta)
+        finally:
+            self._processing_link = False
+
+    def _on_toggle_link(self, checked):
+        self._link = bool(checked)
+        if checked:
+            self._last_slice = {id(v): v.get_slice() for v in self.four_view.slice_views()}
+        self.statusBar().showMessage(
+            "切片联动已开启" if checked else "切片联动已关闭", 2000
+        )
 
     # ---- 槽 ----
     def _on_open(self):
