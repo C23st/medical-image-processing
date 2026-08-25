@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 import vtk
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QEvent, Signal
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from vtkmodules.util import numpy_support
@@ -110,11 +110,10 @@ class SliceViewWidget(QWidget):
         self._interactor = self.vtk_widget.GetRenderWindow().GetInteractor()
         self._style = vtk.vtkInteractorStyleImage()
         self._interactor.SetInteractorStyle(self._style)
-        # 自定义交互: 左键拾取种子点, 滚轮翻层。
-        # 观察者优先级(1.0)高于默认样式(0.0), 返回 "AbortFlagOn" 阻止默认行为。
+        # 左键拾取种子点 (观察者)
         self._interactor.AddObserver("LeftButtonPressEvent", self._on_left_press, 1.0)
-        self._interactor.AddObserver("MouseWheelForwardEvent", self._on_wheel_forward, 1.0)
-        self._interactor.AddObserver("MouseWheelBackwardEvent", self._on_wheel_backward, 1.0)
+        # 滚轮翻层改用 Qt 事件过滤器拦截, 彻底避免 VTK 默认的滚轮缩放
+        self.vtk_widget.installEventFilter(self)
 
         self.image_actor = vtk.vtkImageActor()
         self.image_actor.GetProperty().SetInterpolationTypeToNearest()
@@ -213,15 +212,15 @@ class SliceViewWidget(QWidget):
     # ---- 交互 ----
     def _on_left_press(self, obj, event):
         self._pick_seed()
-        return "AbortFlagOn"
 
-    def _on_wheel_forward(self, obj, event):
-        self._nudge_slice(1)
-        return "AbortFlagOn"
-
-    def _on_wheel_backward(self, obj, event):
-        self._nudge_slice(-1)
-        return "AbortFlagOn"
+    def eventFilter(self, watched, event):
+        """拦截滚轮事件: 翻层而非缩放。"""
+        if watched is self.vtk_widget and event.type() == QEvent.Type.Wheel:
+            delta = event.angleDelta().y()
+            if delta != 0:
+                self._nudge_slice(1 if delta > 0 else -1)
+            return True  # 消费事件, 不再传给 VTK
+        return super().eventFilter(watched, event)
 
     # ---- 拾取 ----
     def _pick_seed(self):
