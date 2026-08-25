@@ -122,6 +122,7 @@ class SliceViewWidget(QWidget):
 
         self.image_actor = vtk.vtkImageActor()
         self.image_actor.GetProperty().SetInterpolationTypeToNearest()
+        self.image_actor.VisibilityOff()  # 无数据时不渲染, 避免空映射器报错
         self.renderer.AddActor(self.image_actor)
 
         self.label_actor = vtk.vtkImageActor()
@@ -200,6 +201,7 @@ class SliceViewWidget(QWidget):
         )
         gray = map_window_level(arr2d, self._window, self._level)
         self.image_actor.SetInputData(to_vtk_2d(gray, sp))
+        self.image_actor.VisibilityOn()
 
         if self._label is not None:
             lb2d, _dims2, sp2 = slice_array(
