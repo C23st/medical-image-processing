@@ -27,9 +27,19 @@ def _normalize(img):
 
 
 # ---- 灰度变换 ----
-def linear_stretch(img):
-    """线性拉伸 (min-max -> [0, 255])。"""
-    return _normalize(img)
+def linear_stretch(img, low_pct=2.0, high_pct=98.0):
+    """线性拉伸 (百分位截断): 将 [P_low, P_high] 线性映射到 [0, 255]。
+
+    截掉两端极值 (噪声/空气/金属), 把主体灰度真正撑满量程。
+    对窗宽窗位已覆盖全范围的 CT, 纯 min-max 拉伸视觉无变化, 百分位截断更有效。
+    """
+    img = img.astype(np.float32)
+    lo = float(np.percentile(img, low_pct))
+    hi = float(np.percentile(img, high_pct))
+    if hi - lo < 1e-8:
+        return np.zeros_like(img, dtype=np.float32)
+    out = np.clip((img - lo) / (hi - lo), 0.0, 1.0)
+    return (out * 255.0).astype(np.float32)
 
 
 def log_transform(img):
@@ -82,7 +92,7 @@ def sharpen(img, amount=1.0):
 # ---- 方法注册表 ----
 # key -> (显示名, 函数, 默认参数)
 METHODS = {
-    "linear": ("线性拉伸", linear_stretch, {}),
+    "linear": ("线性拉伸", linear_stretch, {"low_pct": 2.0, "high_pct": 98.0}),
     "log": ("对数变换", log_transform, {}),
     "gamma": ("伽马变换", gamma_transform, {"gamma": 1.0}),
     "hist_eq": ("直方图均衡", hist_equalize, {}),
