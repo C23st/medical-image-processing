@@ -32,12 +32,7 @@ class MainWindow(QMainWindow):
         self._mask = None
         self._seed = None
         self.volumes = []
-        self._link = False
-        self._processing_link = False
-        self._last_slice = {}
-        self._link_action = None
         self._crosshair = None
-        self._setting_crosshair = False
         self._show_crosshair = False
         self._crosshair_action = None
 
@@ -105,11 +100,6 @@ class MainWindow(QMainWindow):
         act_reset = QAction("重置视图", self)
         act_reset.triggered.connect(self._on_reset_view)
         m_view.addAction(act_reset)
-        self._link_action = QAction("切片联动", self)
-        self._link_action.setCheckable(True)
-        self._link_action.setChecked(False)
-        self._link_action.toggled.connect(self._on_toggle_link)
-        m_view.addAction(self._link_action)
         self._crosshair_action = QAction("十字准星", self)
         self._crosshair_action.setCheckable(True)
         self._crosshair_action.setChecked(False)
@@ -148,7 +138,6 @@ class MainWindow(QMainWindow):
 
         add("打开", self._on_open)
         tb.addSeparator()
-        tb.addAction(self._link_action)
         tb.addAction(self._crosshair_action)
         tb.addSeparator()
         add("窗宽窗位", None, False)
@@ -185,7 +174,6 @@ class MainWindow(QMainWindow):
         self.info.set_patient(volume)
         self.params.set_window_level(volume.window, volume.level)
         self._on_window_level(volume.window, volume.level)
-        self._last_slice = {id(v): v.get_slice() for v in self.four_view.slice_views()}
         self._update_info_slices()
         self.four_view.render_all()
 
@@ -196,34 +184,9 @@ class MainWindow(QMainWindow):
             parts.append(f"{view.label}: {view.get_slice()}/{hi}")
         self.info.set_slice(" | ".join(parts))
 
-    # ---- 切片联动 ----
+    # ---- 切片变化 (仅更新信息栏) ----
     def _on_slice_changed(self, view, new_index):
         self._update_info_slices()
-        last = self._last_slice.get(id(view))
-        self._last_slice[id(view)] = new_index
-        if self._setting_crosshair:
-            return  # 十字联动跳层, 不再触发滚轮联动
-        if not self._link or self._processing_link or last is None:
-            return
-        delta = new_index - last
-        if delta == 0:
-            return
-        self._processing_link = True
-        try:
-            for other in self.four_view.slice_views():
-                if other is view:
-                    continue
-                other.set_slice(other.get_slice() + delta)
-        finally:
-            self._processing_link = False
-
-    def _on_toggle_link(self, checked):
-        self._link = bool(checked)
-        if checked:
-            self._last_slice = {id(v): v.get_slice() for v in self.four_view.slice_views()}
-        self.statusBar().showMessage(
-            "切片联动已开启" if checked else "切片联动已关闭", 2000
-        )
 
     # ---- 十字准星联动 ----
     def _on_crosshair_moved(self, view, z, y, x):
@@ -232,19 +195,15 @@ class MainWindow(QMainWindow):
             return
         self._crosshair = (z, y, x)
         axial, coronal, sagittal = self.four_view.slice_views()
-        self._setting_crosshair = True
-        try:
-            if view is axial:
-                coronal.set_slice(y)
-                sagittal.set_slice(x)
-            elif view is coronal:
-                axial.set_slice(z)
-                sagittal.set_slice(x)
-            else:  # sagittal
-                axial.set_slice(z)
-                coronal.set_slice(y)
-        finally:
-            self._setting_crosshair = False
+        if view is axial:
+            coronal.set_slice(y)
+            sagittal.set_slice(x)
+        elif view is coronal:
+            axial.set_slice(z)
+            sagittal.set_slice(x)
+        else:  # sagittal
+            axial.set_slice(z)
+            coronal.set_slice(y)
 
         for v in self.four_view.slice_views():
             v.set_crosshair((z, y, x))
