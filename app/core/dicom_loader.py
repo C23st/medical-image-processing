@@ -91,6 +91,8 @@ def _build_volume(items):
     n = np.linalg.norm(normal)
     if n > 0:
         normal = normal / n
+    # 方向余弦矩阵 (3x3, 列分别为 x/y/z 轴方向余弦)
+    direction = np.column_stack([row, col, normal])
 
     nframes = int(_val(first, "NumberOfFrames", 0) or 0)
 
@@ -148,6 +150,7 @@ def _build_volume(items):
         data=data,
         spacing=(sx, sy, sz),
         origin=tuple(float(v) for v in origin),
+        direction=direction,
         modality=modality,
         patient=patient,
         window=window,

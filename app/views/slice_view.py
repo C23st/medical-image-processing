@@ -87,6 +87,7 @@ class SliceViewWidget(QWidget):
 
     slice_changed = Signal(int)        # 当前切片索引
     picked = Signal(int, int, int)     # 拾取体素 (z, y, x)
+    crosshair_moved = Signal(int, int, int)  # Shift+移动 (z, y, x)
 
     def __init__(self, orientation=AXIAL, parent=None):
         super().__init__(parent)
@@ -97,8 +98,11 @@ class SliceViewWidget(QWidget):
         self._slice = 0
         self._window = 255.0
         self._level = 127.5
+        self._crosshair = None
+        self._show_crosshair = False
 
         self.vtk_widget = QVTKRenderWindowInteractor(self)
+        self.vtk_widget.setMouseTracking(True)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.vtk_widget)
@@ -112,6 +116,7 @@ class SliceViewWidget(QWidget):
         self._interactor.SetInteractorStyle(self._style)
         # 左键拾取种子点 (观察者)
         self._interactor.AddObserver("LeftButtonPressEvent", self._on_left_press, 1.0)
+        self._interactor.AddObserver("MouseMoveEvent", self._on_mouse_move, 1.0)
         # 滚轮翻层改用 Qt 事件过滤器拦截, 彻底避免 VTK 默认的滚轮缩放
         self.vtk_widget.installEventFilter(self)
 
@@ -129,6 +134,10 @@ class SliceViewWidget(QWidget):
         self.corner.SetMaximumFontSize(18)
         self.corner.SetText(2, self.label)
         self.renderer.AddViewProp(self.corner)
+
+        self._cross_actor = self._create_cross_actor()
+        self.renderer.AddActor(self._cross_actor)
+        self._cross_actor.VisibilityOff()
 
     # ---- 属性 ----
     @property
@@ -213,6 +222,38 @@ class SliceViewWidget(QWidget):
     def _on_left_press(self, obj, event):
         self._pick_seed()
 
+    def _on_mouse_move(self, obj, event):
+        """Shift + 移动鼠标: 发射鼠标处体数据坐标 (十字联动)。"""
+        if self._data is None or not self._interactor.GetShiftKey():
+            return
+        try:
+            rc = self._mouse_to_rc()
+            if rc is None:
+                return
+            row, col = rc
+            z, y, x = volume_coords(self.orientation, self._slice, row, col)
+            self.crosshair_moved.emit(int(z), int(y), int(x))
+        except Exception:  # noqa: BLE001
+            import traceback
+
+            traceback.print_exc()
+
+    def _mouse_to_rc(self):
+        """当前鼠标位置 -> (row, col); 越界返回 None。"""
+        xd, yd = self._interactor.GetEventPosition()
+        self.renderer.SetDisplayPoint(xd, yd, 0.0)
+        self.renderer.DisplayToWorld()
+        wx, wy, _wz, _w = self.renderer.GetWorldPoint()
+        arr2d, _dims, sp = slice_array(
+            self._data, self._spacing, self.orientation, self._slice
+        )
+        rows, cols = arr2d.shape
+        col = int(round(wx / sp[0]))
+        row = int(round(wy / sp[1]))
+        if not (0 <= row < rows and 0 <= col < cols):
+            return None
+        return row, col
+
     def eventFilter(self, watched, event):
         """拦截滚轮事件: 翻层而非缩放。"""
         if watched is self.vtk_widget and event.type() == QEvent.Type.Wheel:
@@ -227,22 +268,80 @@ class SliceViewWidget(QWidget):
         if self._data is None:
             return
         try:
-            xd, yd = self._interactor.GetEventPosition()
-            self.renderer.SetDisplayPoint(xd, yd, 0.0)
-            self.renderer.DisplayToWorld()
-            wx, wy, _wz, _w = self.renderer.GetWorldPoint()
-
-            arr2d, _dims, sp = slice_array(
-                self._data, self._spacing, self.orientation, self._slice
-            )
-            rows, cols = arr2d.shape
-            col = int(round(wx / sp[0]))
-            row = int(round(wy / sp[1]))
-            row = max(0, min(rows - 1, row))
-            col = max(0, min(cols - 1, col))
+            rc = self._mouse_to_rc()
+            if rc is None:
+                return
+            row, col = rc
             z, y, x = volume_coords(self.orientation, self._slice, row, col)
             self.picked.emit(int(z), int(y), int(x))
         except Exception:  # noqa: BLE001
             import traceback
 
             traceback.print_exc()
+
+    # ---- 十字准星 ----
+    def _create_cross_actor(self):
+        points = vtk.vtkPoints()
+        points.SetNumberOfPoints(4)
+        for i in range(4):
+            points.SetPoint(i, 0.0, 0.0, 1.5)
+        l1 = vtk.vtkLine()
+        l1.GetPointIds().SetId(0, 0)
+        l1.GetPointIds().SetId(1, 1)
+        l2 = vtk.vtkLine()
+        l2.GetPointIds().SetId(0, 2)
+        l2.GetPointIds().SetId(1, 3)
+        lines = vtk.vtkCellArray()
+        lines.InsertNextCell(l1)
+        lines.InsertNextCell(l2)
+        poly = vtk.vtkPolyData()
+        poly.SetPoints(points)
+        poly.SetLines(lines)
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputData(poly)
+        actor = vtk.vtkActor()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetColor(1.0, 0.85, 0.0)
+        actor.GetProperty().SetLineWidth(2.0)
+        return actor
+
+    def _crosshair_rc(self, z, y, x):
+        """定位点 (z,y,x) 在当前视图平面上的 (col, row)。"""
+        if self.orientation == self.AXIAL:
+            return x, y
+        if self.orientation == self.CORONAL:
+            return x, z
+        return y, z
+
+    def set_crosshair(self, zyx):
+        """设置/清除十字准星定位点 (z, y, x)。"""
+        self._crosshair = None if zyx is None else tuple(int(v) for v in zyx)
+        self._update_crosshair()
+
+    def set_show_crosshair(self, on):
+        self._show_crosshair = bool(on)
+        self._update_crosshair()
+
+    def _update_crosshair(self):
+        if self._crosshair is None or not self._show_crosshair or self._data is None:
+            self._cross_actor.VisibilityOff()
+            self.render()
+            return
+        z, y, x = self._crosshair
+        col, row = self._crosshair_rc(z, y, x)
+        arr2d, _dims, sp = slice_array(
+            self._data, self._spacing, self.orientation, self._slice
+        )
+        rows, cols = arr2d.shape
+        wx = col * sp[0]
+        wy = row * sp[1]
+        w = cols * sp[0]
+        h = rows * sp[1]
+        points = self._cross_actor.GetMapper().GetInput().GetPoints()
+        points.SetPoint(0, wx, 0.0, 1.5)
+        points.SetPoint(1, wx, h, 1.5)
+        points.SetPoint(2, 0.0, wy, 1.5)
+        points.SetPoint(3, w, wy, 1.5)
+        points.Modified()
+        self._cross_actor.VisibilityOn()
+        self.render()

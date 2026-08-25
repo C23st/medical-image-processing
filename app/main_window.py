@@ -36,6 +36,10 @@ class MainWindow(QMainWindow):
         self._processing_link = False
         self._last_slice = {}
         self._link_action = None
+        self._crosshair = None
+        self._setting_crosshair = False
+        self._show_crosshair = False
+        self._crosshair_action = None
 
         self._build_central()
         self._build_docks()
@@ -52,6 +56,7 @@ class MainWindow(QMainWindow):
         for view in self.four_view.slice_views():
             view.slice_changed.connect(partial(self._on_slice_changed, view))
             view.picked.connect(self._on_picked)
+            view.crosshair_moved.connect(partial(self._on_crosshair_moved, view))
 
     def _build_docks(self):
         self.tree = DataTreeWidget()
@@ -105,6 +110,11 @@ class MainWindow(QMainWindow):
         self._link_action.setChecked(False)
         self._link_action.toggled.connect(self._on_toggle_link)
         m_view.addAction(self._link_action)
+        self._crosshair_action = QAction("十字准星", self)
+        self._crosshair_action.setCheckable(True)
+        self._crosshair_action.setChecked(False)
+        self._crosshair_action.toggled.connect(self._on_toggle_crosshair)
+        m_view.addAction(self._crosshair_action)
 
         # 功能占位菜单
         self._placeholder_menu(menubar, "分割(&S)")
@@ -139,6 +149,7 @@ class MainWindow(QMainWindow):
         add("打开", self._on_open)
         tb.addSeparator()
         tb.addAction(self._link_action)
+        tb.addAction(self._crosshair_action)
         tb.addSeparator()
         add("窗宽窗位", None, False)
         add("缩放", None, False)
@@ -190,6 +201,8 @@ class MainWindow(QMainWindow):
         self._update_info_slices()
         last = self._last_slice.get(id(view))
         self._last_slice[id(view)] = new_index
+        if self._setting_crosshair:
+            return  # 十字联动跳层, 不再触发滚轮联动
         if not self._link or self._processing_link or last is None:
             return
         delta = new_index - last
@@ -211,6 +224,51 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             "切片联动已开启" if checked else "切片联动已关闭", 2000
         )
+
+    # ---- 十字准星联动 ----
+    def _on_crosshair_moved(self, view, z, y, x):
+        """Shift+移动: 以鼠标处 3D 点为中心, 其余两视图实时跳层。"""
+        if self._base_volume is None:
+            return
+        self._crosshair = (z, y, x)
+        axial, coronal, sagittal = self.four_view.slice_views()
+        self._setting_crosshair = True
+        try:
+            if view is axial:
+                coronal.set_slice(y)
+                sagittal.set_slice(x)
+            elif view is coronal:
+                axial.set_slice(z)
+                sagittal.set_slice(x)
+            else:  # sagittal
+                axial.set_slice(z)
+                coronal.set_slice(y)
+        finally:
+            self._setting_crosshair = False
+
+        for v in self.four_view.slice_views():
+            v.set_crosshair((z, y, x))
+        self.statusBar().showMessage(self._crosshair_status(z, y, x), 3000)
+
+    def _on_toggle_crosshair(self, checked):
+        self._show_crosshair = bool(checked)
+        for v in self.four_view.slice_views():
+            v.set_show_crosshair(self._show_crosshair)
+        if not checked:
+            self._crosshair = None
+        self.statusBar().showMessage(
+            "十字准星已开启 (Shift+移动鼠标联动)" if checked else "十字准星已关闭", 2000
+        )
+
+    def _crosshair_status(self, z, y, x):
+        vol = self._base_volume
+        if vol is None:
+            return f"定位点 z={z} y={y} x={x}"
+        try:
+            r, a, s = vol.index_to_ras(z, y, x)
+            return f"定位点 z={z} y={y} x={x} | RAS=({r:.1f}, {a:.1f}, {s:.1f}) mm"
+        except Exception:  # noqa: BLE001
+            return f"定位点 z={z} y={y} x={x}"
 
     # ---- 槽 ----
     def _on_open(self):
@@ -239,7 +297,10 @@ class MainWindow(QMainWindow):
         self._base_volume = volume
         self._mask = None
         self._seed = None
+        self._crosshair = None
         self.four_view.set_labelmap(None)
+        for v in self.four_view.slice_views():
+            v.set_crosshair(None)
         self.set_volume(volume)
 
     def _on_enhance_apply(self, method, params):
