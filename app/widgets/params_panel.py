@@ -170,6 +170,7 @@ class ParamsPanel(QTabWidget):
 
         box = QGroupBox("分割方法")
         form = QFormLayout(box)
+        self._seg_form = form
         self.seg_combo = QComboBox()
         self.seg_combo.addItem("阈值分割", "threshold")
         self.seg_combo.addItem("Otsu 自动阈值", "otsu")
@@ -187,6 +188,7 @@ class ParamsPanel(QTabWidget):
         self.tol_spin.setValue(30.0)
         self.tol_spin.setSingleStep(5.0)
         form.addRow("生长容差 (HU)", self.tol_spin)
+        self._tol_row = form.rowCount() - 1
         layout.addWidget(box)
 
         hint = QLabel(
@@ -208,6 +210,13 @@ class ParamsPanel(QTabWidget):
 
         self.seg_apply_btn.clicked.connect(self._emit_segment_apply)
         self.seg_clear_btn.clicked.connect(self.segment_clear)
+        self.seg_combo.currentIndexChanged.connect(self._update_seg_param_visibility)
+        self._update_seg_param_visibility()
+
+    def _update_seg_param_visibility(self):
+        """仅"区域生长"需要生长容差, 其余方法隐藏该参数行。"""
+        is_rg = self.seg_combo.currentData() == "region_growing"
+        self._seg_form.setRowVisible(self._tol_row, is_rg)
 
     def _emit_segment_apply(self):
         key = self.seg_combo.currentData()
