@@ -363,6 +363,7 @@ class MainWindow(QMainWindow):
             data,
             spacing=base.spacing,
             origin=base.origin,
+            direction=base.direction,  # 增强只改数值, 保留方向矩阵保证坐标系一致
             modality=base.modality,
             patient=base.patient,
             window=window,
