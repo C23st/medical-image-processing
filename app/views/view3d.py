@@ -1,9 +1,49 @@
-"""三维视图: 体数据包围盒 + 方向标记 + 面绘制/体绘制重建 (P5)。"""
+"""三维视图: 体数据包围盒 + 方向标记 + 面绘制/体绘制重建 (P5) + 切平面定位 (P6)。"""
 from __future__ import annotations
 
+import numpy as np
 import vtk
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
+
+from .slice_view import map_window_level, to_vtk_2d
+
+
+def _direction(image):
+    """vtkImageData 方向矩阵 -> numpy 3x3 (列为 x/y/z 轴方向余弦)。"""
+    M = np.eye(3)
+    dm = image.GetDirectionMatrix()
+    if dm is not None:
+        for r in range(3):
+            for c in range(3):
+                M[r, c] = dm.GetElement(r, c)
+    return M
+
+
+def index_to_world(image, i, j, k):
+    """体数据索引 (i,j,k) -> 世界坐标 (方向矩阵+origin+spacing)。"""
+    ox, oy, oz = image.GetOrigin()
+    sx, sy, sz = image.GetSpacing()
+    v = np.array([i * sx, j * sy, k * sz])
+    return np.array([ox, oy, oz]) + _direction(image) @ v
+
+
+def compute_plane_specs(image, zyx, data):
+    """计算三个正交切平面规格 (纯函数, 可无 GL 测试)。
+
+    返回 [(slice2d, 法向轴, 切片索引, vec_a, vec_b), ...]:
+      - vec_a: 平面沿"列"方向的向量 (纹理 u)
+      - vec_b: 平面沿"行"方向的向量 (纹理 v)
+    """
+    z, y, x = zyx
+    nx, ny, nz = image.GetDimensions()
+    sx, sy, sz = image.GetSpacing()
+    M = _direction(image)
+    return [
+        (data[z], 2, z, M[:, 0] * (nx * sx), M[:, 1] * (ny * sy)),   # Axial
+        (data[:, y, :], 1, y, M[:, 0] * (nx * sx), M[:, 2] * (nz * sz)),  # Coronal
+        (data[:, :, x], 0, x, M[:, 1] * (ny * sy), M[:, 2] * (nz * sz)),  # Sagittal
+    ]
 
 
 class View3DWidget(QWidget):
@@ -13,6 +53,8 @@ class View3DWidget(QWidget):
         self.outline_actor = None
         self._surface_actor = None
         self._volume_actor = None
+        self._planes_actors = None
+        self._show_planes = False
 
         self.vtk_widget = QVTKRenderWindowInteractor(self)
         layout = QVBoxLayout(self)
@@ -181,3 +223,51 @@ class View3DWidget(QWidget):
 
     def has_reconstruction(self):
         return self._surface_actor is not None or self._volume_actor is not None
+
+    # ---- 二维切片平面定位 (P6) ----
+    def set_slice_planes(self, zyx, image, data, window, level):
+        """显示三个正交切平面 (位置 + CT 图像纹理), 随切片索引移动。"""
+        specs = compute_plane_specs(image, zyx, data)
+        if self._planes_actors is None:
+            self._planes_actors = [self._new_plane_actor() for _ in specs]
+        for actor, (slice2d, axis, idx, va, vb) in zip(self._planes_actors, specs):
+            self._update_plane(actor, slice2d, image, axis, idx, va, vb, window, level)
+        self.render()
+
+    def _new_plane_actor(self):
+        plane = vtk.vtkPlaneSource()
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputConnection(plane.GetOutputPort())
+        actor = vtk.vtkActor()
+        actor.SetMapper(mapper)
+        actor.SetTexture(vtk.vtkTexture())
+        actor.GetProperty().SetOpacity(0.65)
+        actor.GetProperty().SetAmbient(1.0)  # 纹理原样显示, 不受光照
+        actor.GetProperty().SetDiffuse(0.0)
+        actor.VisibilityOff()
+        self.renderer.AddActor(actor)
+        return actor
+
+    def _update_plane(self, actor, slice2d, image, axis, idx, va, vb, window, level):
+        origin = index_to_world(
+            image, *[idx if a == axis else 0 for a in range(3)]
+        )
+        plane = actor.GetMapper().GetInput()
+        plane.SetOrigin(*origin)
+        plane.SetPoint1(*(origin + va))
+        plane.SetPoint2(*(origin + vb))
+        tex_img = to_vtk_2d(map_window_level(slice2d, window, level), (1.0, 1.0))
+        actor.GetTexture().SetInputData(tex_img)
+        actor.SetVisibility(1 if self._show_planes else 0)
+
+    def show_slice_planes(self, on):
+        self._show_planes = bool(on)
+        for a in (self._planes_actors or []):
+            a.SetVisibility(1 if self._show_planes else 0)
+        self.render()
+
+    def clear_slice_planes(self):
+        for a in (self._planes_actors or []):
+            self.renderer.RemoveActor(a)
+        self._planes_actors = None
+        self.render()

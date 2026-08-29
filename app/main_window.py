@@ -37,6 +37,9 @@ class MainWindow(QMainWindow):
         self._crosshair = None
         self._show_crosshair = False
         self._crosshair_action = None
+        self._show_planes = False
+        self._planes_action = None
+        self._vtk_image = None
 
         self._build_central()
         self._build_docks()
@@ -111,6 +114,11 @@ class MainWindow(QMainWindow):
         self._crosshair_action.setChecked(False)
         self._crosshair_action.toggled.connect(self._on_toggle_crosshair)
         m_view.addAction(self._crosshair_action)
+        self._planes_action = QAction("切片平面 (3D)", self)
+        self._planes_action.setCheckable(True)
+        self._planes_action.setChecked(False)
+        self._planes_action.toggled.connect(self._on_toggle_slice_planes)
+        m_view.addAction(self._planes_action)
 
         m_view3d = m_view.addMenu("3D 视角")
         for act in self._view3d_actions.values():
@@ -170,6 +178,7 @@ class MainWindow(QMainWindow):
         add("打开", self._on_open)
         tb.addSeparator()
         tb.addAction(self._crosshair_action)
+        tb.addAction(self._planes_action)
         tb.addSeparator()
         view_btn = QToolButton()
         view_btn.setText("3D 视角")
@@ -210,11 +219,13 @@ class MainWindow(QMainWindow):
 
     def set_volume(self, volume):
         self._volume = volume
+        self._vtk_image = volume.to_vtk_image(apply_direction=True)
         self.four_view.set_volume(volume)
         self.info.set_patient(volume)
         self.params.set_window_level(volume.window, volume.level)
         self._on_window_level(volume.window, volume.level)
         self._update_info_slices()
+        self._update_3d_planes()
         self.four_view.render_all()
 
     def _update_info_slices(self):
@@ -224,9 +235,32 @@ class MainWindow(QMainWindow):
             parts.append(f"{view.label}: {view.get_slice()}/{hi}")
         self.info.set_slice(" | ".join(parts))
 
-    # ---- 切片变化 (仅更新信息栏) ----
+    # ---- 切片变化 ----
     def _on_slice_changed(self, view, new_index):
         self._update_info_slices()
+        self._update_3d_planes()
+
+    # ---- 3D 切平面 ----
+    def _update_3d_planes(self):
+        """按当前三视图切片索引更新 3D 切平面 (开关开启时)。"""
+        if self._volume is None or self._show_planes is False:
+            return
+        z = self.four_view.axial.get_slice()
+        y = self.four_view.coronal.get_slice()
+        x = self.four_view.sagittal.get_slice()
+        self.four_view.view3d.set_slice_planes(
+            (z, y, x), self._vtk_image, self._volume.data,
+            self._volume.window, self._volume.level,
+        )
+
+    def _on_toggle_slice_planes(self, checked):
+        self._show_planes = bool(checked)
+        self.four_view.view3d.show_slice_planes(self._show_planes)
+        if checked:
+            self._update_3d_planes()
+        self.statusBar().showMessage(
+            "3D 切平面已开启" if checked else "3D 切平面已关闭", 2000
+        )
 
     # ---- 十字准星联动 ----
     def _on_crosshair_moved(self, view, z, y, x):
@@ -298,6 +332,7 @@ class MainWindow(QMainWindow):
         self._seed = None
         self._crosshair = None
         self.four_view.set_labelmap(None)
+        self.four_view.view3d.clear_slice_planes()
         for v in self.four_view.slice_views():
             v.set_crosshair(None)
         self.set_volume(volume)
