@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 import vtk
-from PySide6.QtCore import QEvent, Signal
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from vtkmodules.util import numpy_support
@@ -114,8 +114,6 @@ class SliceViewWidget(QWidget):
         self._interactor = self.vtk_widget.GetRenderWindow().GetInteractor()
         self._style = vtk.vtkInteractorStyleImage()
         self._interactor.SetInteractorStyle(self._style)
-        # 左键拾取种子点 (观察者)
-        self._interactor.AddObserver("LeftButtonPressEvent", self._on_left_press, 1.0)
         self._interactor.AddObserver("MouseMoveEvent", self._on_mouse_move, 1.0)
         # 滚轮翻层改用 Qt 事件过滤器拦截, 彻底避免 VTK 默认的滚轮缩放
         self.vtk_widget.installEventFilter(self)
@@ -221,9 +219,6 @@ class SliceViewWidget(QWidget):
         self.vtk_widget.GetRenderWindow().Render()
 
     # ---- 交互 ----
-    def _on_left_press(self, obj, event):
-        self._pick_seed()
-
     def _on_mouse_move(self, obj, event):
         """Shift + 移动鼠标: 发射鼠标处体数据坐标 (十字联动)。"""
         if self._data is None or not self._interactor.GetShiftKey():
@@ -257,19 +252,31 @@ class SliceViewWidget(QWidget):
         return row, col
 
     def eventFilter(self, watched, event):
-        """拦截滚轮事件: 翻层而非缩放。"""
-        if watched is self.vtk_widget and event.type() == QEvent.Type.Wheel:
-            delta = event.angleDelta().y()
-            if delta != 0:
-                self._nudge_slice(1 if delta > 0 else -1)
-            return True  # 消费事件, 不再传给 VTK
+        """拦截 Qt 事件: 滚轮翻层、左键拾取; 彻底阻止样式左键调窗。
+
+        左键按下在到达 VTK 前被消费, vtkInteractorStyleImage 收不到
+        按下事件, 永远不会进入"调窗"状态, 左键拖动不再改变窗宽窗位。
+        """
+        if watched is self.vtk_widget:
+            if event.type() == QEvent.Type.Wheel:
+                delta = event.angleDelta().y()
+                if delta != 0:
+                    self._nudge_slice(1 if delta > 0 else -1)
+                return True  # 消费事件, 不再传给 VTK
+            if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.LeftButton:
+                self._pick_from_qt(event.position())
+                return True  # 消费事件, 样式收不到左键按下
         return super().eventFilter(watched, event)
 
     # ---- 拾取 ----
-    def _pick_seed(self):
+    def _pick_from_qt(self, pos):
+        """Qt 左键按下 -> 拾取体素 (z,y,x) 并发射 picked。"""
         if self._data is None:
             return
         try:
+            x = int(pos.x())
+            y_disp = int(self.vtk_widget.height() - pos.y())  # Qt y 向下 -> VTK 显示 y 向上
+            self._interactor.SetEventPosition(x, y_disp)
             rc = self._mouse_to_rc()
             if rc is None:
                 return
