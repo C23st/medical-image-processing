@@ -14,6 +14,8 @@ from PySide6.QtWidgets import QVBoxLayout, QWidget
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from vtkmodules.util import numpy_support
 
+from ..widgets.view_toolbar import ViewToolbar
+
 AXIAL = 0
 CORONAL = 1
 SAGITTAL = 2
@@ -105,8 +107,11 @@ class SliceViewWidget(QWidget):
 
         self.vtk_widget = QVTKRenderWindowInteractor(self)
         self.vtk_widget.setMouseTracking(True)
+        self.toolbar = ViewToolbar(self)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.toolbar)
         layout.addWidget(self.vtk_widget)
 
         self.renderer = vtk.vtkRenderer()

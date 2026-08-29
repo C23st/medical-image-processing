@@ -6,6 +6,7 @@ import vtk
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 
+from ..widgets.view_toolbar import ViewToolbar
 from .slice_view import map_window_level, to_vtk_2d
 
 
@@ -57,8 +58,11 @@ class View3DWidget(QWidget):
         self._show_planes = False
 
         self.vtk_widget = QVTKRenderWindowInteractor(self)
+        self.toolbar = ViewToolbar(self)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.toolbar)
         layout.addWidget(self.vtk_widget)
 
         self.renderer = vtk.vtkRenderer()

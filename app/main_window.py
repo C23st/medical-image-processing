@@ -10,9 +10,7 @@ from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
     QMainWindow,
-    QMenu,
     QMessageBox,
-    QToolButton,
 )
 
 from .core import VolumeData, enhance, segment
@@ -43,6 +41,7 @@ class MainWindow(QMainWindow):
 
         self._build_central()
         self._build_docks()
+        self._build_view_toolbars()
         self._build_menus()
         self._build_toolbar()
         self._build_statusbar()
@@ -90,7 +89,6 @@ class MainWindow(QMainWindow):
 
     def _build_menus(self):
         menubar = self.menuBar()
-        self._build_view3d_actions()
 
         # 文件
         m_file = menubar.addMenu("文件(&F)")
@@ -103,26 +101,6 @@ class MainWindow(QMainWindow):
         m_file.addAction(act_open)
         m_file.addSeparator()
         m_file.addAction(act_exit)
-
-        # 视图
-        m_view = menubar.addMenu("视图(&V)")
-        act_reset = QAction("重置视图", self)
-        act_reset.triggered.connect(self._on_reset_view)
-        m_view.addAction(act_reset)
-        self._crosshair_action = QAction("十字准星", self)
-        self._crosshair_action.setCheckable(True)
-        self._crosshair_action.setChecked(False)
-        self._crosshair_action.toggled.connect(self._on_toggle_crosshair)
-        m_view.addAction(self._crosshair_action)
-        self._planes_action = QAction("切片平面 (3D)", self)
-        self._planes_action.setCheckable(True)
-        self._planes_action.setChecked(False)
-        self._planes_action.toggled.connect(self._on_toggle_slice_planes)
-        m_view.addAction(self._planes_action)
-
-        m_view3d = m_view.addMenu("3D 视角")
-        for act in self._view3d_actions.values():
-            m_view3d.addAction(act)
 
         # 功能占位菜单
         self._placeholder_menu(menubar, "分割(&S)")
@@ -141,18 +119,45 @@ class MainWindow(QMainWindow):
         act.setEnabled(False)
         menu.addAction(act)
 
-    def _build_view3d_actions(self):
-        """创建 3D 视角相关动作 (复位 + 6 个标准方位)。"""
-        self._view3d_actions = {}
-        self._view3d_actions["复位视角"] = QAction("复位视角", self)
-        self._view3d_actions["复位视角"].triggered.connect(self._on_reset_3d)
-        for name in (
-            "前 (Anterior)", "后 (Posterior)", "右 (Right)",
-            "左 (Left)", "上 (Superior)", "下 (Inferior)",
+    # ---- 视图图标工具栏 (左上角) ----
+    def _build_view_toolbars(self):
+        """给四个视图各配一个左上角图标工具栏, 替代旧的视图菜单/工具栏按钮。"""
+        # 全局开关 (共享 QAction, 状态同步)
+        self._crosshair_action = QAction("✛", self)
+        self._crosshair_action.setToolTip("十字准星定位线")
+        self._crosshair_action.setCheckable(True)
+        self._crosshair_action.toggled.connect(self._on_toggle_crosshair)
+
+        self._planes_action = QAction("▦", self)
+        self._planes_action.setToolTip("3D 切片平面")
+        self._planes_action.setCheckable(True)
+        self._planes_action.toggled.connect(self._on_toggle_slice_planes)
+
+        # 切片视图: 复位 | 十字准星 | 切片平面
+        for view in self.four_view.slice_views():
+            act_reset = QAction("↺", self)
+            act_reset.setToolTip("复位视图 (缩放/平移)")
+            act_reset.triggered.connect(lambda _=False, v=view: v.reset_view())
+            view.toolbar.add_action(act_reset)
+            view.toolbar.add_action(self._crosshair_action)
+            view.toolbar.add_action(self._planes_action)
+
+        # 3D 视图: 复位 | 前/后/右/左/上/下 | 切片平面
+        v3d = self.four_view.view3d
+        act_reset3d = QAction("↺", self)
+        act_reset3d.setToolTip("复位视角")
+        act_reset3d.triggered.connect(self._on_reset_3d)
+        v3d.toolbar.add_action(act_reset3d)
+        for full, short in (
+            ("前 (Anterior)", "前"), ("后 (Posterior)", "后"),
+            ("右 (Right)", "右"), ("左 (Left)", "左"),
+            ("上 (Superior)", "上"), ("下 (Inferior)", "下"),
         ):
-            act = QAction(name, self)
-            act.triggered.connect(lambda _=False, n=name: self._on_std_3d(n))
-            self._view3d_actions[name] = act
+            act = QAction(short, self)
+            act.setToolTip(full)
+            act.triggered.connect(lambda _=False, n=full: self._on_std_3d(n))
+            v3d.toolbar.add_action(act)
+        v3d.toolbar.add_action(self._planes_action)
 
     def _on_reset_3d(self):
         self.four_view.view3d.reset_view()
@@ -176,18 +181,6 @@ class MainWindow(QMainWindow):
             return act
 
         add("打开", self._on_open)
-        tb.addSeparator()
-        tb.addAction(self._crosshair_action)
-        tb.addAction(self._planes_action)
-        tb.addSeparator()
-        view_btn = QToolButton()
-        view_btn.setText("3D 视角")
-        view_btn.setPopupMode(QToolButton.InstantPopup)
-        view_menu = QMenu(view_btn)
-        for act in self._view3d_actions.values():
-            view_menu.addAction(act)
-        view_btn.setMenu(view_menu)
-        tb.addWidget(view_btn)
         tb.addSeparator()
         add("窗宽窗位", None, False)
         add("缩放", None, False)
@@ -483,10 +476,6 @@ class MainWindow(QMainWindow):
         except Exception:  # noqa: BLE001
             return ""
         return f" | 与胰腺真值 Dice={d:.3f}"
-
-    def _on_reset_view(self):
-        self.four_view.reset_all()
-        self.statusBar().showMessage("视图已重置", 3000)
 
     def _on_window_level(self, window, level):
         for view in self.four_view.slice_views():
