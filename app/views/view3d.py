@@ -55,7 +55,7 @@ class View3DWidget(QWidget):
         self._surface_actor = None
         self._volume_actor = None
         self._planes = None
-        self._show_planes = False
+        self._plane_on = {"axial": False, "coronal": False, "sagittal": False}
 
         self.vtk_widget = QVTKRenderWindowInteractor(self)
         self.toolbar = ViewToolbar(self)
@@ -261,13 +261,25 @@ class View3DWidget(QWidget):
         plane_src.SetPoint2(*(origin + vb))
         tex_img = to_vtk_2d(map_window_level(slice2d, window, level), (1.0, 1.0))
         actor.GetTexture().SetInputData(tex_img)
-        actor.SetVisibility(1 if self._show_planes else 0)
+        axis_name = {2: "axial", 1: "coronal", 0: "sagittal"}[axis]
+        actor.SetVisibility(1 if self._plane_on.get(axis_name, False) else 0)
 
-    def show_slice_planes(self, on):
-        self._show_planes = bool(on)
-        for a, _p in (self._planes or []):
-            a.SetVisibility(1 if self._show_planes else 0)
+    def set_plane_visible(self, axis, on):
+        """单独开关某个切平面 (axis: axial/coronal/sagittal)。"""
+        if axis not in self._plane_on:
+            return
+        self._plane_on[axis] = bool(on)
+        if self._planes is not None:
+            idx = {"axial": 0, "coronal": 1, "sagittal": 2}[axis]
+            actor, _p = self._planes[idx]
+            actor.SetVisibility(1 if self._plane_on[axis] else 0)
         self.render()
+
+    def is_plane_visible(self, axis):
+        return self._plane_on.get(axis, False)
+
+    def any_plane_visible(self):
+        return any(self._plane_on.values())
 
     def clear_slice_planes(self):
         for a, _p in (self._planes or []):

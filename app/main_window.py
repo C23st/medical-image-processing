@@ -35,8 +35,6 @@ class MainWindow(QMainWindow):
         self._crosshair = None
         self._show_crosshair = False
         self._crosshair_action = None
-        self._show_planes = False
-        self._planes_action = None
         self._vtk_image = None
 
         self._build_central()
@@ -128,21 +126,28 @@ class MainWindow(QMainWindow):
         self._crosshair_action.setCheckable(True)
         self._crosshair_action.toggled.connect(self._on_toggle_crosshair)
 
-        self._planes_action = QAction("▦", self)
-        self._planes_action.setToolTip("3D 切片平面")
-        self._planes_action.setCheckable(True)
-        self._planes_action.toggled.connect(self._on_toggle_slice_planes)
+        # 切片平面: 轴/冠/矢 三个独立开关
+        self._plane_actions = {}
+        for axis, label, tip in (
+            ("axial", "轴", "轴向切片平面 (Axial)"),
+            ("coronal", "冠", "冠状切片平面 (Coronal)"),
+            ("sagittal", "矢", "矢状切片平面 (Sagittal)"),
+        ):
+            act = QAction(label, self)
+            act.setToolTip(tip)
+            act.setCheckable(True)
+            act.toggled.connect(lambda c, a=axis: self._on_toggle_plane(a, c))
+            self._plane_actions[axis] = act
 
-        # 切片视图: 复位 | 十字准星 | 切片平面
+        # 切片视图: 复位 | 十字准星
         for view in self.four_view.slice_views():
             act_reset = QAction("↺", self)
             act_reset.setToolTip("复位视图 (缩放/平移)")
             act_reset.triggered.connect(lambda _=False, v=view: v.reset_view())
             view.toolbar.add_action(act_reset)
             view.toolbar.add_action(self._crosshair_action)
-            view.toolbar.add_action(self._planes_action)
 
-        # 3D 视图: 复位 | 前/后/右/左/上/下 | 切片平面
+        # 3D 视图: 复位 | 前/后/右/左/上/下 | 轴/冠/矢
         v3d = self.four_view.view3d
         act_reset3d = QAction("↺", self)
         act_reset3d.setToolTip("复位视角")
@@ -157,7 +162,8 @@ class MainWindow(QMainWindow):
             act.setToolTip(full)
             act.triggered.connect(lambda _=False, n=full: self._on_std_3d(n))
             v3d.toolbar.add_action(act)
-        v3d.toolbar.add_action(self._planes_action)
+        for axis in ("axial", "coronal", "sagittal"):
+            v3d.toolbar.add_action(self._plane_actions[axis])
 
     def _on_reset_3d(self):
         self.four_view.view3d.reset_view()
@@ -235,24 +241,27 @@ class MainWindow(QMainWindow):
 
     # ---- 3D 切平面 ----
     def _update_3d_planes(self):
-        """按当前三视图切片索引更新 3D 切平面 (开关开启时)。"""
-        if self._volume is None or self._show_planes is False:
+        """按当前三视图切片索引更新 3D 切平面 (任一平面开启时)。"""
+        v3d = self.four_view.view3d
+        if self._volume is None or not v3d.any_plane_visible():
             return
         z = self.four_view.axial.get_slice()
         y = self.four_view.coronal.get_slice()
         x = self.four_view.sagittal.get_slice()
-        self.four_view.view3d.set_slice_planes(
+        v3d.set_slice_planes(
             (z, y, x), self._vtk_image, self._volume.data,
             self._volume.window, self._volume.level,
         )
 
-    def _on_toggle_slice_planes(self, checked):
-        self._show_planes = bool(checked)
-        self.four_view.view3d.show_slice_planes(self._show_planes)
+    def _on_toggle_plane(self, axis, checked):
+        """单独开关某个 3D 切平面 (轴/冠/矢)。"""
+        v3d = self.four_view.view3d
+        v3d.set_plane_visible(axis, checked)
         if checked:
             self._update_3d_planes()
+        name = {"axial": "轴向", "coronal": "冠状", "sagittal": "矢状"}[axis]
         self.statusBar().showMessage(
-            "3D 切平面已开启" if checked else "3D 切平面已关闭", 2000
+            f"{name}切平面已{'开启' if checked else '关闭'}", 2000
         )
 
     # ---- 十字准星联动 ----
