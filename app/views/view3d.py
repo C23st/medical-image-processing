@@ -54,7 +54,7 @@ class View3DWidget(QWidget):
         self.outline_actor = None
         self._surface_actor = None
         self._volume_actor = None
-        self._planes_actors = None
+        self._planes = None
         self._show_planes = False
 
         self.vtk_widget = QVTKRenderWindowInteractor(self)
@@ -232,13 +232,13 @@ class View3DWidget(QWidget):
     def set_slice_planes(self, zyx, image, data, window, level):
         """显示三个正交切平面 (位置 + CT 图像纹理), 随切片索引移动。"""
         specs = compute_plane_specs(image, zyx, data)
-        if self._planes_actors is None:
-            self._planes_actors = [self._new_plane_actor() for _ in specs]
-        for actor, (slice2d, axis, idx, va, vb) in zip(self._planes_actors, specs):
-            self._update_plane(actor, slice2d, image, axis, idx, va, vb, window, level)
+        if self._planes is None:
+            self._planes = [self._new_plane() for _ in specs]
+        for (actor, plane_src), (slice2d, axis, idx, va, vb) in zip(self._planes, specs):
+            self._update_plane(actor, plane_src, slice2d, image, axis, idx, va, vb, window, level)
         self.render()
 
-    def _new_plane_actor(self):
+    def _new_plane(self):
         plane = vtk.vtkPlaneSource()
         mapper = vtk.vtkPolyDataMapper()
         mapper.SetInputConnection(plane.GetOutputPort())
@@ -250,28 +250,27 @@ class View3DWidget(QWidget):
         actor.GetProperty().SetDiffuse(0.0)
         actor.VisibilityOff()
         self.renderer.AddActor(actor)
-        return actor
+        return (actor, plane)
 
-    def _update_plane(self, actor, slice2d, image, axis, idx, va, vb, window, level):
+    def _update_plane(self, actor, plane_src, slice2d, image, axis, idx, va, vb, window, level):
         origin = index_to_world(
             image, *[idx if a == axis else 0 for a in range(3)]
         )
-        plane = actor.GetMapper().GetInput()
-        plane.SetOrigin(*origin)
-        plane.SetPoint1(*(origin + va))
-        plane.SetPoint2(*(origin + vb))
+        plane_src.SetOrigin(*origin)
+        plane_src.SetPoint1(*(origin + va))
+        plane_src.SetPoint2(*(origin + vb))
         tex_img = to_vtk_2d(map_window_level(slice2d, window, level), (1.0, 1.0))
         actor.GetTexture().SetInputData(tex_img)
         actor.SetVisibility(1 if self._show_planes else 0)
 
     def show_slice_planes(self, on):
         self._show_planes = bool(on)
-        for a in (self._planes_actors or []):
+        for a, _p in (self._planes or []):
             a.SetVisibility(1 if self._show_planes else 0)
         self.render()
 
     def clear_slice_planes(self):
-        for a in (self._planes_actors or []):
+        for a, _p in (self._planes or []):
             self.renderer.RemoveActor(a)
-        self._planes_actors = None
+        self._planes = None
         self.render()
