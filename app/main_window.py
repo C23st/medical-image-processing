@@ -1,6 +1,8 @@
-"""主窗口: 菜单栏 / 工具栏 / 四视图 / 数据树 / 参数面板 / 信息区。"""
+"""主窗口: 菜单栏 / 四视图 / 数据树 / 参数面板 / 信息区。"""
 from __future__ import annotations
 
+import json
+import os
 from functools import partial
 
 from PySide6.QtCore import Qt
@@ -21,6 +23,8 @@ from .widgets.data_tree import DataTreeWidget
 from .widgets.info_bar import InfoBar
 from .widgets.params_panel import ParamsPanel
 
+RECENT_FILE = os.path.join(os.path.expanduser("~"), ".medimg_recent.json")
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -37,12 +41,12 @@ class MainWindow(QMainWindow):
         self._crosshair_action = None
         self._vtk_image = None
         self._enhance_undo = []  # [(label, VolumeData), ...] 增强历史 (限制条数)
+        self._recent = self._load_recent()
 
         self._build_central()
         self._build_docks()
         self._build_view_toolbars()
         self._build_menus()
-        self._build_toolbar()
         self._build_statusbar()
 
         self._load_synthetic()
@@ -95,17 +99,14 @@ class MainWindow(QMainWindow):
         act_open = QAction("打开 DICOM 文件夹...", self)
         act_open.setShortcut(QKeySequence.Open)
         act_open.triggered.connect(self._on_open)
+        m_file.addAction(act_open)
+        self._recent_menu = m_file.addMenu("最近打开")
+        self._update_recent_menu()
+        m_file.addSeparator()
         act_exit = QAction("退出", self)
         act_exit.setShortcut(QKeySequence.Quit)
         act_exit.triggered.connect(self.close)
-        m_file.addAction(act_open)
-        m_file.addSeparator()
         m_file.addAction(act_exit)
-
-        # 功能占位菜单
-        self._placeholder_menu(menubar, "分割(&S)")
-        self._placeholder_menu(menubar, "增强(&E)")
-        self._placeholder_menu(menubar, "三维重建(&R)")
 
         # 帮助
         m_help = menubar.addMenu("帮助(&H)")
@@ -113,11 +114,51 @@ class MainWindow(QMainWindow):
         act_about.triggered.connect(self._on_about)
         m_help.addAction(act_about)
 
-    def _placeholder_menu(self, menubar, title):
-        menu = menubar.addMenu(title)
-        act = QAction("(待实现)", self)
-        act.setEnabled(False)
-        menu.addAction(act)
+    # ---- 最近打开 ----
+    def _load_recent(self):
+        try:
+            with open(RECENT_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return [p for p in data if isinstance(p, str)][:8]
+        except Exception:  # noqa: BLE001
+            return []
+
+    def _save_recent(self):
+        try:
+            with open(RECENT_FILE, "w", encoding="utf-8") as f:
+                json.dump(self._recent[:8], f, ensure_ascii=False, indent=1)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _add_recent(self, directory):
+        if directory in self._recent:
+            self._recent.remove(directory)
+        self._recent.insert(0, directory)
+        self._recent = self._recent[:8]
+        self._save_recent()
+        self._update_recent_menu()
+
+    def _update_recent_menu(self):
+        self._recent_menu.clear()
+        if not self._recent:
+            act = QAction("（空）", self)
+            act.setEnabled(False)
+            self._recent_menu.addAction(act)
+            return
+        for path in self._recent:
+            act = QAction(path, self)
+            act.setToolTip(path)
+            act.triggered.connect(lambda _=False, p=path: self._open_folder(p))
+            self._recent_menu.addAction(act)
+        self._recent_menu.addSeparator()
+        clear_act = QAction("清除最近记录", self)
+        clear_act.triggered.connect(self._clear_recent)
+        self._recent_menu.addAction(clear_act)
+
+    def _clear_recent(self):
+        self._recent = []
+        self._save_recent()
+        self._update_recent_menu()
 
     # ---- 视图图标工具栏 (左上角) ----
     def _build_view_toolbars(self):
@@ -168,27 +209,6 @@ class MainWindow(QMainWindow):
     def _on_std_3d(self, name):
         self.four_view.view3d.set_standard_view(name)
         self.statusBar().showMessage(f"3D 视角: {name}", 2000)
-
-    def _build_toolbar(self):
-        tb = self.addToolBar("主工具栏")
-        tb.setMovable(False)
-        tb.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-
-        def add(text, slot=None, enabled=True):
-            act = QAction(text, self)
-            act.setEnabled(enabled)
-            if slot is not None:
-                act.triggered.connect(slot)
-            tb.addAction(act)
-            return act
-
-        add("打开", self._on_open)
-        tb.addSeparator()
-        add("窗宽窗位", None, False)
-        add("缩放", None, False)
-        add("分割", None, False)
-        add("增强", None, False)
-        add("重建", None, False)
 
     def _build_statusbar(self):
         self.statusBar().showMessage("就绪 | 已加载合成体数据")
@@ -308,11 +328,15 @@ class MainWindow(QMainWindow):
         )
         if not directory:
             return
+        self._open_folder(directory)
+
+    def _open_folder(self, directory):
         volumes = load_dicom_series(directory)
         if not volumes:
             QMessageBox.warning(self, "打开 DICOM", "未在该目录找到含图像数据的 DICOM 序列。")
             return
         self.load_volumes(volumes)
+        self._add_recent(directory)
         self.statusBar().showMessage(f"已加载 {len(volumes)} 个序列: {directory}", 5000)
 
     def _on_series_selected(self, index):
