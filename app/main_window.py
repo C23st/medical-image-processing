@@ -215,7 +215,7 @@ class MainWindow(QMainWindow):
     def set_volume(self, volume):
         self._volume = volume
         self._vtk_image = volume.to_vtk_image(apply_direction=True)
-        self.four_view.set_volume(volume)
+        self.four_view.set_volume(volume, self._vtk_image)
         self.info.set_patient(volume)
         self.params.set_window_level(volume.window, volume.level)
         self._on_window_level(volume.window, volume.level)
@@ -373,7 +373,7 @@ class MainWindow(QMainWindow):
         if self._mask is not None:
             self.four_view.set_labelmap(self._mask)
         self._enhance_undo.append((label, volume))
-        if len(self._enhance_undo) > 5:  # 限制内存
+        if len(self._enhance_undo) > 3:  # 限制内存 (每步体数据约240MB)
             self._enhance_undo.pop(0)
         self._refresh_enhance_history()
         QApplication.restoreOverrideCursor()

@@ -27,10 +27,13 @@ class FourViewWidget(QWidget):
     def slice_views(self):
         return (self.axial, self.coronal, self.sagittal)
 
-    def set_volume(self, volume):
+    def set_volume(self, volume, image=None):
         for view in self.slice_views():
             view.set_volume_data(volume.data, volume.spacing)
-        self.view3d.set_image(volume.to_vtk_image(apply_direction=True))
+        # 复用外部传入的 vtk 图像, 避免重复拷贝 (降低内存)
+        if image is None:
+            image = volume.to_vtk_image(apply_direction=True)
+        self.view3d.set_image(image)
 
     def set_labelmap(self, mask):
         for view in self.slice_views():
