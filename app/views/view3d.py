@@ -58,5 +58,9 @@ class View3DWidget(QWidget):
         self.renderer.AddActor(self.outline_actor)
         self.renderer.ResetCamera()
 
+    def reset_view(self):
+        self.renderer.ResetCamera()
+        self.render()
+
     def render(self):
         self.vtk_widget.GetRenderWindow().Render()

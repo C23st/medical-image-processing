@@ -384,7 +384,7 @@ class MainWindow(QMainWindow):
         return f" | 与胰腺真值 Dice={d:.3f}"
 
     def _on_reset_view(self):
-        self.four_view.render_all()
+        self.four_view.reset_all()
         self.statusBar().showMessage("视图已重置", 3000)
 
     def _on_window_level(self, window, level):

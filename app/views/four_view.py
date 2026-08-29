@@ -39,3 +39,8 @@ class FourViewWidget(QWidget):
     def render_all(self):
         for view in (self.axial, self.coronal, self.sagittal, self.view3d):
             view.render()
+
+    def reset_all(self):
+        """重置所有视图的相机 (缩放/平移复位)。"""
+        for view in (self.axial, self.coronal, self.sagittal, self.view3d):
+            view.reset_view()

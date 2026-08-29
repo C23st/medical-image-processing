@@ -101,6 +101,7 @@ class SliceViewWidget(QWidget):
         self._level = 127.5
         self._crosshair = None
         self._show_crosshair = False
+        self._pan_last = None
 
         self.vtk_widget = QVTKRenderWindowInteractor(self)
         self.vtk_widget.setMouseTracking(True)
@@ -110,6 +111,7 @@ class SliceViewWidget(QWidget):
 
         self.renderer = vtk.vtkRenderer()
         self.renderer.SetBackground(0.10, 0.10, 0.12)
+        self.renderer.GetActiveCamera().ParallelProjectionOn()  # 2D 视图用平行投影
         self.vtk_widget.GetRenderWindow().AddRenderer(self.renderer)
 
         self._interactor = self.vtk_widget.GetRenderWindow().GetInteractor()
@@ -256,21 +258,79 @@ class SliceViewWidget(QWidget):
         return row, col
 
     def eventFilter(self, watched, event):
-        """拦截 Qt 事件: 滚轮翻层、左键拾取; 彻底阻止样式左键调窗。
+        """拦截 Qt 事件: 滚轮翻层 / Ctrl+滚轮缩放 / 左键拾取 / 中键拖动平移。
 
-        左键按下在到达 VTK 前被消费, vtkInteractorStyleImage 收不到
-        按下事件, 永远不会进入"调窗"状态, 左键拖动不再改变窗宽窗位。
+        事件在到达 VTK 前被消费, 彻底阻止样式默认行为 (左键调窗等)。
         """
         if watched is self.vtk_widget:
-            if event.type() == QEvent.Type.Wheel:
+            t = event.type()
+            if t == QEvent.Type.Wheel:
                 delta = event.angleDelta().y()
                 if delta != 0:
-                    self._nudge_slice(1 if delta > 0 else -1)
-                return True  # 消费事件, 不再传给 VTK
-            if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.LeftButton:
+                    if event.modifiers() & Qt.ControlModifier:
+                        self._zoom(1.1 if delta > 0 else 1 / 1.1)
+                    else:
+                        self._nudge_slice(1 if delta > 0 else -1)
+                return True
+            if t == QEvent.Type.MouseButtonPress and event.button() == Qt.LeftButton:
                 self._pick_from_qt(event.position())
-                return True  # 消费事件, 样式收不到左键按下
+                return True
+            if t == QEvent.Type.MouseButtonPress and event.button() == Qt.MiddleButton:
+                self._pan_last = event.position()
+                return True
+            if (
+                t == QEvent.Type.MouseMove
+                and (event.buttons() & Qt.MiddleButton)
+                and self._pan_last is not None
+            ):
+                self._pan_camera(event.position())
+                return True
+            if t == QEvent.Type.MouseButtonRelease and event.button() == Qt.MiddleButton:
+                self._pan_last = None
+                return True
         return super().eventFilter(watched, event)
+
+    # ---- 缩放 / 平移 ----
+    def _zoom(self, factor):
+        if self._data is None:
+            return
+        cam = self.renderer.GetActiveCamera()
+        cam.Zoom(factor)
+        self.render()
+
+    def _pan_camera(self, pos):
+        if self._data is None or self._pan_last is None:
+            return
+        try:
+            h = self.vtk_widget.height()
+            x1, y1 = int(pos.x()), int(h - pos.y())
+            x2, y2 = int(self._pan_last.x()), int(h - self._pan_last.y())
+            self.renderer.SetDisplayPoint(x1, y1, 0.0)
+            self.renderer.DisplayToWorld()
+            wx1, wy1, _wz1, _w1 = self.renderer.GetWorldPoint()
+            self.renderer.SetDisplayPoint(x2, y2, 0.0)
+            self.renderer.DisplayToWorld()
+            wx2, wy2, _wz2, _w2 = self.renderer.GetWorldPoint()
+            # 内容跟随光标: 相机(位置+焦点)同时平移 旧光标世界点 - 新光标世界点
+            dx, dy = wx2 - wx1, wy2 - wy1
+            cam = self.renderer.GetActiveCamera()
+            p = cam.GetPosition()
+            f = cam.GetFocalPoint()
+            cam.SetPosition(p[0] + dx, p[1] + dy, p[2])
+            cam.SetFocalPoint(f[0] + dx, f[1] + dy, f[2])
+            self.render()
+            self._pan_last = pos
+        except Exception:  # noqa: BLE001
+            import traceback
+
+            traceback.print_exc()
+
+    def reset_view(self):
+        """重置缩放/平移 (图像适配视图)。"""
+        if self._data is None:
+            return
+        self.renderer.ResetCamera()
+        self.render()
 
     # ---- 拾取 ----
     def _pick_from_qt(self, pos):
