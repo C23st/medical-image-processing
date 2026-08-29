@@ -182,6 +182,7 @@ class ParamsPanel(QTabWidget):
         self.thresh_spin.setValue(100.0)
         self.thresh_spin.setSingleStep(10.0)
         form.addRow("阈值 (HU)", self.thresh_spin)
+        self._thresh_row = form.rowCount() - 1
 
         self.tol_spin = QDoubleSpinBox()
         self.tol_spin.setRange(1.0, 300.0)
@@ -214,9 +215,10 @@ class ParamsPanel(QTabWidget):
         self._update_seg_param_visibility()
 
     def _update_seg_param_visibility(self):
-        """仅"区域生长"需要生长容差, 其余方法隐藏该参数行。"""
-        is_rg = self.seg_combo.currentData() == "region_growing"
-        self._seg_form.setRowVisible(self._tol_row, is_rg)
+        """按方法显示相关参数: 阈值仅阈值分割用, 生长容差仅区域生长用。"""
+        method = self.seg_combo.currentData()
+        self._seg_form.setRowVisible(self._thresh_row, method == "threshold")
+        self._seg_form.setRowVisible(self._tol_row, method == "region_growing")
 
     def _emit_segment_apply(self):
         key = self.seg_combo.currentData()
