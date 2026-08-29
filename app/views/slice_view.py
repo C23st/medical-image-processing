@@ -88,6 +88,7 @@ class SliceViewWidget(QWidget):
     slice_changed = Signal(int)        # 当前切片索引
     picked = Signal(int, int, int)     # 拾取体素 (z, y, x)
     crosshair_moved = Signal(int, int, int)  # Shift+移动 (z, y, x)
+    hovered = Signal(int, int, int)    # 鼠标悬停位置 (z, y, x), 实时
 
     def __init__(self, orientation=AXIAL, parent=None):
         super().__init__(parent)
@@ -220,8 +221,8 @@ class SliceViewWidget(QWidget):
 
     # ---- 交互 ----
     def _on_mouse_move(self, obj, event):
-        """Shift + 移动鼠标: 发射鼠标处体数据坐标 (十字联动)。"""
-        if self._data is None or not self._interactor.GetShiftKey():
+        """鼠标移动: 实时发射悬停位置 (hovered); 按住 Shift 同时发射十字联动。"""
+        if self._data is None:
             return
         try:
             rc = self._mouse_to_rc()
@@ -229,7 +230,10 @@ class SliceViewWidget(QWidget):
                 return
             row, col = rc
             z, y, x = volume_coords(self.orientation, self._slice, row, col)
-            self.crosshair_moved.emit(int(z), int(y), int(x))
+            zi, yi, xi = int(z), int(y), int(x)
+            if self._interactor.GetShiftKey():
+                self.crosshair_moved.emit(zi, yi, xi)
+            self.hovered.emit(zi, yi, xi)
         except Exception:  # noqa: BLE001
             import traceback
 

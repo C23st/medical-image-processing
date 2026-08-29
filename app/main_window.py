@@ -52,6 +52,7 @@ class MainWindow(QMainWindow):
             view.slice_changed.connect(partial(self._on_slice_changed, view))
             view.picked.connect(self._on_picked)
             view.crosshair_moved.connect(partial(self._on_crosshair_moved, view))
+            view.hovered.connect(self._on_hovered)
 
     def _build_docks(self):
         self.tree = DataTreeWidget()
@@ -352,6 +353,13 @@ class MainWindow(QMainWindow):
             val = float(self._base_volume.data[z, y, x])
             self.info.set_value(f"{val:.1f}")
         self.statusBar().showMessage(f"拾取点: 层{z}, y={y}, x={x}", 3000)
+
+    def _on_hovered(self, z, y, x):
+        """实时显示鼠标位置与体素值 (无需点击)。"""
+        if self._base_volume is None:
+            return
+        val = float(self._base_volume.data[z, y, x])
+        self.info.set_hover(z, y, x, val)
 
     def _compute_dice(self, mask):
         """与同病人 SEG 真值计算 Dice (有则返回提示文本)。"""

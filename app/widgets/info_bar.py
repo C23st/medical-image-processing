@@ -15,6 +15,7 @@ class InfoBar(QFrame):
         self.lbl_modality = self._add(layout, "模态: -")
         self.lbl_size = self._add(layout, "尺寸: -")
         self.lbl_slice = self._add(layout, "切片: -")
+        self.lbl_pos = self._add(layout, "位置: -")
         self.lbl_value = self._add(layout, "体素值: -")
         self.lbl_wwl = self._add(layout, "WW/WL: -")
         layout.addStretch(1)
@@ -35,6 +36,11 @@ class InfoBar(QFrame):
 
     def set_slice(self, text):
         self.lbl_slice.setText(f"切片: {text}")
+
+    def set_hover(self, z, y, x, value):
+        """实时显示鼠标悬停位置与体素值 (无需点击)。"""
+        self.lbl_pos.setText(f"位置: 层{z} y={y} x={x}")
+        self.lbl_value.setText(f"体素值: {value:.1f}")
 
     def set_value(self, text):
         self.lbl_value.setText(f"体素值: {text}")
