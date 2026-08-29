@@ -108,12 +108,58 @@ class ParamsPanel(QTabWidget):
         self.amount_spin.setValue(1.0)
         self.amount_spin.setSingleStep(0.1)
 
+        # 频域滤波参数
+        self.fft_kind_combo = QComboBox()
+        self.fft_kind_combo.addItem("低通 (平滑)", "lowpass")
+        self.fft_kind_combo.addItem("高通 (边缘)", "highpass")
+        self.fft_kind_combo.addItem("带通", "bandpass")
+        self.cutoff_spin = QDoubleSpinBox()
+        self.cutoff_spin.setRange(0.01, 0.5)
+        self.cutoff_spin.setValue(0.1)
+        self.cutoff_spin.setSingleStep(0.01)
+        self.width_spin = QDoubleSpinBox()
+        self.width_spin.setRange(0.01, 0.5)
+        self.width_spin.setValue(0.1)
+        self.width_spin.setSingleStep(0.01)
+
+        # 双边滤波参数
+        self.sigma_space_spin = QDoubleSpinBox()
+        self.sigma_space_spin.setRange(1.0, 50.0)
+        self.sigma_space_spin.setValue(9.0)
+        self.sigma_space_spin.setSingleStep(1.0)
+        self.sigma_color_spin = QDoubleSpinBox()
+        self.sigma_color_spin.setRange(1.0, 255.0)
+        self.sigma_color_spin.setValue(75.0)
+        self.sigma_color_spin.setSingleStep(5.0)
+
+        # 同态滤波参数
+        self.gamma_low_spin = QDoubleSpinBox()
+        self.gamma_low_spin.setRange(0.05, 1.0)
+        self.gamma_low_spin.setValue(0.4)
+        self.gamma_low_spin.setSingleStep(0.05)
+        self.gamma_high_spin = QDoubleSpinBox()
+        self.gamma_high_spin.setRange(1.0, 4.0)
+        self.gamma_high_spin.setValue(1.5)
+        self.gamma_high_spin.setSingleStep(0.1)
+        self.homo_cutoff_spin = QDoubleSpinBox()
+        self.homo_cutoff_spin.setRange(0.01, 0.5)
+        self.homo_cutoff_spin.setValue(0.1)
+        self.homo_cutoff_spin.setSingleStep(0.01)
+
         self._param_rows = {
             "gamma": self._add_row(form, "γ (gamma)", self.gamma_spin),
             "clip": self._add_row(form, "clip_limit", self.clip_spin),
             "size": self._add_row(form, "核大小", self.size_spin),
             "sigma": self._add_row(form, "σ (sigma)", self.sigma_spin),
             "amount": self._add_row(form, "锐化量", self.amount_spin),
+            "kind": self._add_row(form, "滤波类型", self.fft_kind_combo),
+            "cutoff": self._add_row(form, "截止频率", self.cutoff_spin),
+            "width": self._add_row(form, "带宽", self.width_spin),
+            "sigma_space": self._add_row(form, "σ空间(px)", self.sigma_space_spin),
+            "sigma_color": self._add_row(form, "σ灰度", self.sigma_color_spin),
+            "gamma_low": self._add_row(form, "γ低", self.gamma_low_spin),
+            "gamma_high": self._add_row(form, "γ高", self.gamma_high_spin),
+            "homo_cutoff": self._add_row(form, "截止频率", self.homo_cutoff_spin),
         }
         layout.addWidget(box)
 
@@ -154,6 +200,9 @@ class ParamsPanel(QTabWidget):
         "median": {"size"},
         "gaussian": {"sigma"},
         "sharpen": {"amount"},
+        "fft": {"kind", "cutoff", "width"},
+        "bilateral": {"sigma_space", "sigma_color"},
+        "homomorphic": {"gamma_low", "gamma_high", "homo_cutoff"},
     }
 
     def _update_param_visibility(self):
@@ -175,6 +224,23 @@ class ParamsPanel(QTabWidget):
             params["sigma"] = self.sigma_spin.value()
         elif key == "sharpen":
             params["amount"] = self.amount_spin.value()
+        elif key == "fft":
+            params = {
+                "kind": self.fft_kind_combo.currentData(),
+                "cutoff": self.cutoff_spin.value(),
+                "width": self.width_spin.value(),
+            }
+        elif key == "bilateral":
+            params = {
+                "sigma_space": self.sigma_space_spin.value(),
+                "sigma_color": self.sigma_color_spin.value(),
+            }
+        elif key == "homomorphic":
+            params = {
+                "gamma_low": self.gamma_low_spin.value(),
+                "gamma_high": self.gamma_high_spin.value(),
+                "cutoff": self.homo_cutoff_spin.value(),
+            }
         self.enhance_apply.emit(key, params)
 
     # ---- 分割页 ----

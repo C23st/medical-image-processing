@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import cv2
 import numpy as np
 from scipy import ndimage
 from skimage import exposure
@@ -89,6 +90,63 @@ def sharpen(img, amount=1.0):
     return img + amount * (img - blurred)
 
 
+# ---- 频域滤波 ----
+def fft_filter(img, kind="lowpass", cutoff=0.1, width=0.1, order=2):
+    """频域滤波 (2D FFT + Butterworth 掩膜): 低通/高通/带通。
+
+    cutoff/width 为归一化频率 (0~0.5 量级); 输出归一化到 [0,255] 便于显示。
+    """
+    img = img.astype(np.float32)
+    rows, cols = img.shape
+    cy, cx = rows // 2, cols // 2
+    yy, xx = np.mgrid[0:rows, 0:cols]
+    r = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2) / (max(rows, cols) * 0.5)
+
+    c0 = max(cutoff, 1e-4)
+    butter = 1.0 / (1.0 + (r / c0) ** (2 * order))
+    if kind == "highpass":
+        mask = 1.0 - butter
+    elif kind == "bandpass":
+        butter_hi = 1.0 / (1.0 + (r / max(cutoff + width, 1e-4)) ** (2 * order))
+        mask = butter - butter_hi
+    else:  # lowpass
+        mask = butter
+
+    fshift = np.fft.fftshift(np.fft.fft2(img)) * mask
+    out = np.real(np.fft.ifft2(np.fft.ifftshift(fshift)))
+    return _normalize(out)
+
+
+# ---- 双边滤波 (保边去噪, 保持原始灰度范围) ----
+def bilateral(img, sigma_space=9.0, sigma_color=75.0):
+    """双边滤波 (OpenCV): 去噪同时保留边缘; 保持原始 HU 范围。"""
+    img = img.astype(np.float32)
+    lo, hi = float(img.min()), float(img.max())
+    if hi - lo < 1e-8:
+        return img
+    u = np.clip((img - lo) / (hi - lo) * 255.0, 0, 255).astype(np.uint8)
+    d = max(3, min(int(sigma_space) * 2 + 1, 21))  # 奇数直径
+    out = cv2.bilateralFilter(u, d, float(sigma_color), float(sigma_space))
+    return (out.astype(np.float32) / 255.0 * (hi - lo) + lo).astype(np.float32)
+
+
+# ---- 同态滤波 ----
+def homomorphic(img, gamma_low=0.4, gamma_high=1.5, cutoff=0.1):
+    """同态滤波: 压缩动态范围并增强对比度 (对数域 + 高通增强 + 指数还原)。"""
+    img = img.astype(np.float32)
+    shifted = img - img.min() + 1.0  # 平移到正区间, 避免对负数取对数
+    rows, cols = img.shape
+    cy, cx = rows // 2, cols // 2
+    yy, xx = np.mgrid[0:rows, 0:cols]
+    d2 = (xx - cx) ** 2 + (yy - cy) ** 2
+    d0 = max(rows, cols) * max(cutoff, 1e-3)
+    h = (gamma_high - gamma_low) * (1.0 - np.exp(-d2 / (d0 * d0))) + gamma_low
+    fshift = np.fft.fftshift(np.fft.fft2(np.log(shifted))) * h
+    log_out = np.clip(np.real(np.fft.ifft2(np.fft.ifftshift(fshift))), -50.0, 50.0)
+    out = np.exp(log_out) - 1.0
+    return _normalize(out)
+
+
 # ---- 方法注册表 ----
 # key -> (显示名, 函数, 默认参数)
 METHODS = {
@@ -101,13 +159,16 @@ METHODS = {
     "median": ("中值滤波", median_filter, {"size": 3}),
     "gaussian": ("高斯滤波", gaussian_filter, {"sigma": 1.0}),
     "sharpen": ("锐化", sharpen, {"amount": 1.0}),
+    "fft": ("频域滤波", fft_filter, {"kind": "lowpass", "cutoff": 0.1, "width": 0.1}),
+    "bilateral": ("双边滤波", bilateral, {"sigma_space": 9.0, "sigma_color": 75.0}),
+    "homomorphic": ("同态滤波", homomorphic, {"gamma_low": 0.4, "gamma_high": 1.5, "cutoff": 0.1}),
 }
 
 # 逐切片处理的方法 (滤波/CLAHE 保持 2D 语义且更快)
-_SLICE_WISE = {"clahe", "mean", "median", "gaussian", "sharpen"}
+_SLICE_WISE = {"clahe", "mean", "median", "gaussian", "sharpen", "fft", "bilateral", "homomorphic"}
 
 # 保持原始灰度 (HU) 范围的方法: 增强后窗宽窗位应沿用原始值
-_PRESERVE_RANGE = {"mean", "median", "gaussian", "sharpen"}
+_PRESERVE_RANGE = {"mean", "median", "gaussian", "sharpen", "bilateral"}
 
 
 def preserves_range(method):
