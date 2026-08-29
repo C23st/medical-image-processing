@@ -250,7 +250,7 @@ class MainWindow(QMainWindow):
         x = self.four_view.sagittal.get_slice()
         v3d.set_slice_planes(
             (z, y, x), self._vtk_image, self._volume.data,
-            self._volume.window, self._volume.level,
+            self._volume.window, self._volume.level, self._mask,
         )
 
     def _on_toggle_plane(self, axis, checked):
@@ -415,6 +415,7 @@ class MainWindow(QMainWindow):
 
         self._mask = mask
         self.four_view.set_labelmap(mask)
+        self._update_3d_planes()  # 切平面同步显示分割叠加
         dice_txt = self._compute_dice(mask)
         QApplication.restoreOverrideCursor()
         self.statusBar().showMessage(f"分割完成{extra}{dice_txt}", 5000)
@@ -422,6 +423,7 @@ class MainWindow(QMainWindow):
     def _on_segment_clear(self):
         self._mask = None
         self.four_view.set_labelmap(None)
+        self._update_3d_planes()  # 切平面移除分割叠加
         self.statusBar().showMessage("已清除分割结果", 3000)
 
     # ---- 三维重建 ----

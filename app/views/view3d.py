@@ -10,6 +10,18 @@ from ..widgets.view_toolbar import ViewToolbar
 from .slice_view import map_window_level, to_vtk_2d
 
 
+def plane_texture(slice2d, lb, window, level):
+    """切平面纹理 (纯函数): 灰度图 (+ 可选红色分割叠加)。"""
+    gray = map_window_level(slice2d, window, level)
+    rgb = np.repeat(gray[:, :, None], 3, axis=2)
+    if lb is not None:
+        m = lb > 0
+        if m.any():
+            blend = rgb[m].astype(np.float32) * 0.4 + np.array([255.0, 64.0, 64.0]) * 0.6
+            rgb[m] = blend.astype(np.uint8)
+    return to_vtk_2d(rgb, (1.0, 1.0), ncomp=3)
+
+
 def _direction(image):
     """vtkImageData 方向矩阵 -> numpy 3x3 (列为 x/y/z 轴方向余弦)。"""
     M = np.eye(3)
@@ -229,13 +241,19 @@ class View3DWidget(QWidget):
         return self._surface_actor is not None or self._volume_actor is not None
 
     # ---- 二维切片平面定位 (P6) ----
-    def set_slice_planes(self, zyx, image, data, window, level):
-        """显示三个正交切平面 (位置 + CT 图像纹理), 随切片索引移动。"""
+    def set_slice_planes(self, zyx, image, data, window, level, label=None):
+        """显示三个正交切平面 (位置 + 图像纹理 + 可选分割叠加), 随切片索引移动。"""
         specs = compute_plane_specs(image, zyx, data)
+        z, y, x = zyx
+        if label is None:
+            label_slices = [None] * len(specs)
+        else:
+            label_slices = [label[z], label[:, y, :], label[:, :, x]]
         if self._planes is None:
             self._planes = [self._new_plane() for _ in specs]
-        for (actor, plane_src), (slice2d, axis, idx, va, vb) in zip(self._planes, specs):
-            self._update_plane(actor, plane_src, slice2d, image, axis, idx, va, vb, window, level)
+        for (actor, plane_src), spec, lb in zip(self._planes, specs, label_slices):
+            slice2d, axis, idx, va, vb = spec
+            self._update_plane(actor, plane_src, slice2d, lb, image, axis, idx, va, vb, window, level)
         self.render()
 
     def _new_plane(self):
@@ -252,14 +270,14 @@ class View3DWidget(QWidget):
         self.renderer.AddActor(actor)
         return (actor, plane)
 
-    def _update_plane(self, actor, plane_src, slice2d, image, axis, idx, va, vb, window, level):
+    def _update_plane(self, actor, plane_src, slice2d, lb, image, axis, idx, va, vb, window, level):
         origin = index_to_world(
             image, *[idx if a == axis else 0 for a in range(3)]
         )
         plane_src.SetOrigin(*origin)
         plane_src.SetPoint1(*(origin + va))
         plane_src.SetPoint2(*(origin + vb))
-        tex_img = to_vtk_2d(map_window_level(slice2d, window, level), (1.0, 1.0))
+        tex_img = plane_texture(slice2d, lb, window, level)
         actor.GetTexture().SetInputData(tex_img)
         axis_name = {2: "axial", 1: "coronal", 0: "sagittal"}[axis]
         actor.SetVisibility(1 if self._plane_on.get(axis_name, False) else 0)
