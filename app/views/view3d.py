@@ -65,6 +65,43 @@ class View3DWidget(QWidget):
         self.renderer.ResetCamera()
         self.render()
 
+    def set_standard_view(self, name):
+        """按标准方位切换 3D 相机 (对应方向标记的 R/L/A/P/S/I)。"""
+        # (相机位置方向, 视图向上参考)
+        presets = {
+            "前 (Anterior)": ((0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
+            "后 (Posterior)": ((0.0, -1.0, 0.0), (0.0, 0.0, 1.0)),
+            "右 (Right)": ((1.0, 0.0, 0.0), (0.0, 0.0, 1.0)),
+            "左 (Left)": ((-1.0, 0.0, 0.0), (0.0, 0.0, 1.0)),
+            "上 (Superior)": ((0.0, 0.0, 1.0), (0.0, 1.0, 0.0)),
+            "下 (Inferior)": ((0.0, 0.0, -1.0), (0.0, 1.0, 0.0)),
+        }
+        if name not in presets:
+            return
+        self._look_from(*presets[name])
+
+    def _look_from(self, direction, up):
+        """把相机放在 direction 指向的一侧, 看向可见物体包围盒中心。"""
+        import math
+
+        b = [0.0] * 6
+        self.renderer.ComputeVisiblePropBounds(b)
+        cx = (b[0] + b[1]) / 2
+        cy = (b[2] + b[3]) / 2
+        cz = (b[4] + b[5]) / 2
+        half_diag = 0.5 * math.sqrt(
+            (b[1] - b[0]) ** 2 + (b[3] - b[2]) ** 2 + (b[5] - b[4]) ** 2
+        )
+        dist = max(half_diag * 2.0, 1.0)
+        dx, dy, dz = direction
+        cam = self.renderer.GetActiveCamera()
+        cam.SetFocalPoint(cx, cy, cz)
+        cam.SetPosition(cx + dx * dist, cy + dy * dist, cz + dz * dist)
+        cam.SetViewUp(*up)
+        cam.OrthogonalizeViewUp()
+        cam.SetClippingRange(0.01, dist * 10)
+        self.render()
+
     def render(self):
         self.vtk_widget.GetRenderWindow().Render()
 

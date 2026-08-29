@@ -10,7 +10,9 @@ from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
     QMainWindow,
+    QMenu,
     QMessageBox,
+    QToolButton,
 )
 
 from .core import VolumeData, enhance, segment
@@ -85,6 +87,7 @@ class MainWindow(QMainWindow):
 
     def _build_menus(self):
         menubar = self.menuBar()
+        self._build_view3d_actions()
 
         # 文件
         m_file = menubar.addMenu("文件(&F)")
@@ -109,6 +112,10 @@ class MainWindow(QMainWindow):
         self._crosshair_action.toggled.connect(self._on_toggle_crosshair)
         m_view.addAction(self._crosshair_action)
 
+        m_view3d = m_view.addMenu("3D 视角")
+        for act in self._view3d_actions.values():
+            m_view3d.addAction(act)
+
         # 功能占位菜单
         self._placeholder_menu(menubar, "分割(&S)")
         self._placeholder_menu(menubar, "增强(&E)")
@@ -126,6 +133,27 @@ class MainWindow(QMainWindow):
         act.setEnabled(False)
         menu.addAction(act)
 
+    def _build_view3d_actions(self):
+        """创建 3D 视角相关动作 (复位 + 6 个标准方位)。"""
+        self._view3d_actions = {}
+        self._view3d_actions["复位视角"] = QAction("复位视角", self)
+        self._view3d_actions["复位视角"].triggered.connect(self._on_reset_3d)
+        for name in (
+            "前 (Anterior)", "后 (Posterior)", "右 (Right)",
+            "左 (Left)", "上 (Superior)", "下 (Inferior)",
+        ):
+            act = QAction(name, self)
+            act.triggered.connect(lambda _=False, n=name: self._on_std_3d(n))
+            self._view3d_actions[name] = act
+
+    def _on_reset_3d(self):
+        self.four_view.view3d.reset_view()
+        self.statusBar().showMessage("3D 视角已复位", 2000)
+
+    def _on_std_3d(self, name):
+        self.four_view.view3d.set_standard_view(name)
+        self.statusBar().showMessage(f"3D 视角: {name}", 2000)
+
     def _build_toolbar(self):
         tb = self.addToolBar("主工具栏")
         tb.setMovable(False)
@@ -142,6 +170,15 @@ class MainWindow(QMainWindow):
         add("打开", self._on_open)
         tb.addSeparator()
         tb.addAction(self._crosshair_action)
+        tb.addSeparator()
+        view_btn = QToolButton()
+        view_btn.setText("3D 视角")
+        view_btn.setPopupMode(QToolButton.InstantPopup)
+        view_menu = QMenu(view_btn)
+        for act in self._view3d_actions.values():
+            view_menu.addAction(act)
+        view_btn.setMenu(view_menu)
+        tb.addWidget(view_btn)
         tb.addSeparator()
         add("窗宽窗位", None, False)
         add("缩放", None, False)
