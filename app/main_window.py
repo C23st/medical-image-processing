@@ -80,6 +80,8 @@ class MainWindow(QMainWindow):
         self.params.enhance_reset.connect(self._on_enhance_reset)
         self.params.segment_apply.connect(self._on_segment_apply)
         self.params.segment_clear.connect(self._on_segment_clear)
+        self.params.reconstruct_apply.connect(self._on_reconstruct_apply)
+        self.params.reconstruct_clear.connect(self._on_reconstruct_clear)
 
     def _build_menus(self):
         menubar = self.menuBar()
@@ -346,6 +348,33 @@ class MainWindow(QMainWindow):
         self._mask = None
         self.four_view.set_labelmap(None)
         self.statusBar().showMessage("已清除分割结果", 3000)
+
+    # ---- 三维重建 ----
+    def _on_reconstruct_apply(self, method, params):
+        if self._volume is None:
+            return
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        self.statusBar().showMessage("三维重建处理中...")
+        try:
+            image = self._volume.to_vtk_image(apply_direction=True)
+            if method == "surface":
+                threshold = params.get("threshold", 300.0)
+                self.four_view.view3d.set_surface(image, threshold)
+                label = f"面绘制 阈值 {threshold:.0f}"
+            else:
+                opacity = params.get("opacity", 0.5)
+                self.four_view.view3d.set_volume_render(image, opacity)
+                label = f"体绘制 不透明度 {opacity:.2f}"
+        except Exception as e:  # noqa: BLE001
+            QApplication.restoreOverrideCursor()
+            QMessageBox.warning(self, "三维重建", f"重建失败: {e}")
+            return
+        QApplication.restoreOverrideCursor()
+        self.statusBar().showMessage(f"重建完成: {label}", 5000)
+
+    def _on_reconstruct_clear(self):
+        self.four_view.view3d.clear_reconstruction()
+        self.statusBar().showMessage("已清除三维重建", 3000)
 
     def _on_picked(self, z, y, x):
         self._seed = (z, y, x)

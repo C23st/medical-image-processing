@@ -27,13 +27,15 @@ class ParamsPanel(QTabWidget):
     enhance_reset = Signal()
     segment_apply = Signal(str, dict)      # (method_key, params)
     segment_clear = Signal()
+    reconstruct_apply = Signal(str, dict)  # (method_key, params)
+    reconstruct_clear = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._build_display_tab()
         self._build_enhance_tab()
         self._build_segmentation_tab()
-        self._build_placeholder_tab("三维重建", "面绘制 (Marching Cubes) + 体绘制\n(将在 P5 阶段实现)")
+        self._build_reconstruct_tab()
 
     # ---- 显示页 ----
     def _build_display_tab(self):
@@ -227,6 +229,80 @@ class ParamsPanel(QTabWidget):
             "tol": self.tol_spin.value(),
         }
         self.segment_apply.emit(key, params)
+
+    # ---- 三维重建页 ----
+    def _build_reconstruct_tab(self):
+        tab = QWidget()
+        self.addTab(tab, "三维重建")
+        layout = QVBoxLayout(tab)
+
+        box = QGroupBox("重建方式")
+        form = QFormLayout(box)
+        self._recon_form = form
+        self.recon_combo = QComboBox()
+        self.recon_combo.addItem("面绘制 (Marching Cubes)", "surface")
+        self.recon_combo.addItem("体绘制 (Ray Casting)", "volume")
+        form.addRow("方式", self.recon_combo)
+
+        self.thresh_recon_spin = QDoubleSpinBox()
+        self.thresh_recon_spin.setRange(-2000.0, 3000.0)
+        self.thresh_recon_spin.setValue(300.0)
+        self.thresh_recon_spin.setSingleStep(10.0)
+        form.addRow("等值面阈值 (HU)", self.thresh_recon_spin)
+        self._recon_thresh_row = form.rowCount() - 1
+
+        preset_row = QHBoxLayout()
+        for label, val in (("骨", 300.0), ("软组织", 40.0), ("皮肤", -150.0), ("掩膜", 0.5)):
+            b = QPushButton(label)
+            b.setFixedWidth(52)
+            b.clicked.connect(lambda _=False, v=val: self.thresh_recon_spin.setValue(v))
+            preset_row.addWidget(b)
+        form.addRow("预设", preset_row)
+        self._recon_preset_row = form.rowCount() - 1
+
+        self.opacity_spin = QDoubleSpinBox()
+        self.opacity_spin.setRange(0.05, 1.0)
+        self.opacity_spin.setValue(0.5)
+        self.opacity_spin.setSingleStep(0.05)
+        form.addRow("不透明度", self.opacity_spin)
+        self._recon_opacity_row = form.rowCount() - 1
+        layout.addWidget(box)
+
+        hint = QLabel(
+            "面绘制: 提取等值面, 适合骨骼/皮肤/分割掩膜\n"
+            "体绘制: 光线投射, 适合软组织/血管\n"
+            "预设按钮快速设阈值 (骨/软组织/皮肤/掩膜)"
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #9aa0a6;")
+        layout.addWidget(hint)
+
+        self.recon_apply_btn = QPushButton("应用重建")
+        self.recon_clear_btn = QPushButton("清除重建")
+        btn_row = QHBoxLayout()
+        btn_row.addWidget(self.recon_apply_btn)
+        btn_row.addWidget(self.recon_clear_btn)
+        layout.addLayout(btn_row)
+        layout.addStretch(1)
+
+        self.recon_combo.currentIndexChanged.connect(self._update_recon_param_visibility)
+        self.recon_apply_btn.clicked.connect(self._emit_reconstruct_apply)
+        self.recon_clear_btn.clicked.connect(self.reconstruct_clear)
+        self._update_recon_param_visibility()
+
+    def _update_recon_param_visibility(self):
+        is_surface = self.recon_combo.currentData() == "surface"
+        self._recon_form.setRowVisible(self._recon_thresh_row, is_surface)
+        self._recon_form.setRowVisible(self._recon_preset_row, is_surface)
+        self._recon_form.setRowVisible(self._recon_opacity_row, not is_surface)
+
+    def _emit_reconstruct_apply(self):
+        method = self.recon_combo.currentData()
+        if method == "surface":
+            params = {"threshold": self.thresh_recon_spin.value()}
+        else:
+            params = {"opacity": self.opacity_spin.value()}
+        self.reconstruct_apply.emit(method, params)
 
     # ---- 占位页 ----
     def _build_placeholder_tab(self, title, text):

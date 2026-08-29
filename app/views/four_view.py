@@ -30,7 +30,7 @@ class FourViewWidget(QWidget):
     def set_volume(self, volume):
         for view in self.slice_views():
             view.set_volume_data(volume.data, volume.spacing)
-        self.view3d.set_image(volume.to_vtk_image())
+        self.view3d.set_image(volume.to_vtk_image(apply_direction=True))
 
     def set_labelmap(self, mask):
         for view in self.slice_views():
