@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import vtk
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtWidgets import QVBoxLayout, QWidget
+from PySide6.QtWidgets import QSlider, QVBoxLayout, QWidget
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from vtkmodules.util import numpy_support
 
@@ -113,6 +113,10 @@ class SliceViewWidget(QWidget):
         layout.setSpacing(0)
         layout.addWidget(self.toolbar)
         layout.addWidget(self.vtk_widget)
+        self.slice_slider = QSlider(Qt.Horizontal)
+        self.slice_slider.setToolTip("快速翻层 (拖动)")
+        self.slice_slider.valueChanged.connect(self._on_slider_changed)
+        layout.addWidget(self.slice_slider)
 
         self.renderer = vtk.vtkRenderer()
         self.renderer.SetBackground(0.10, 0.10, 0.12)
@@ -157,7 +161,9 @@ class SliceViewWidget(QWidget):
         self._spacing = tuple(float(s) for s in spacing)
         self._label = None
         lo, hi = self.slice_range()
+        self.slice_slider.setRange(lo, hi)
         self._slice = (lo + hi) // 2
+        self._sync_slider()
         self._render()
         self.renderer.ResetCamera()
 
@@ -187,8 +193,17 @@ class SliceViewWidget(QWidget):
     def set_slice(self, idx):
         lo, hi = self.slice_range()
         self._slice = int(max(lo, min(hi, idx)))
+        self._sync_slider()
         self._render()
         self.slice_changed.emit(self._slice)
+
+    def _on_slider_changed(self, value):
+        self.set_slice(value)
+
+    def _sync_slider(self):
+        self.slice_slider.blockSignals(True)
+        self.slice_slider.setValue(self._slice)
+        self.slice_slider.blockSignals(False)
 
     def _nudge_slice(self, delta):
         self.set_slice(self._slice + delta)

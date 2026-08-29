@@ -126,28 +126,24 @@ class MainWindow(QMainWindow):
         self._crosshair_action.setCheckable(True)
         self._crosshair_action.toggled.connect(self._on_toggle_crosshair)
 
-        # 切片平面: 轴/冠/矢 三个独立开关
+        # 切片视图: 复位 | 十字准星 | 3D(本视图切平面开关)
         self._plane_actions = {}
-        for axis, label, tip in (
-            ("axial", "轴", "轴向切片平面 (Axial)"),
-            ("coronal", "冠", "冠状切片平面 (Coronal)"),
-            ("sagittal", "矢", "矢状切片平面 (Sagittal)"),
+        for view, axis in zip(
+            self.four_view.slice_views(), ("axial", "coronal", "sagittal")
         ):
-            act = QAction(label, self)
-            act.setToolTip(tip)
-            act.setCheckable(True)
-            act.toggled.connect(lambda c, a=axis: self._on_toggle_plane(a, c))
-            self._plane_actions[axis] = act
-
-        # 切片视图: 复位 | 十字准星
-        for view in self.four_view.slice_views():
             act_reset = QAction("↺", self)
             act_reset.setToolTip("复位视图 (缩放/平移)")
             act_reset.triggered.connect(lambda _=False, v=view: v.reset_view())
             view.toolbar.add_action(act_reset)
             view.toolbar.add_action(self._crosshair_action)
+            act3d = QAction("3D", self)
+            act3d.setToolTip("在 3D 视图中显示本视图的切平面")
+            act3d.setCheckable(True)
+            act3d.toggled.connect(lambda c, a=axis: self._on_toggle_plane(a, c))
+            self._plane_actions[axis] = act3d
+            view.toolbar.add_action(act3d)
 
-        # 3D 视图: 复位 | 前/后/右/左/上/下 | 轴/冠/矢
+        # 3D 视图: 复位视角 | 前/后/右/左/上/下
         v3d = self.four_view.view3d
         act_reset3d = QAction("↺", self)
         act_reset3d.setToolTip("复位视角")
@@ -162,8 +158,6 @@ class MainWindow(QMainWindow):
             act.setToolTip(full)
             act.triggered.connect(lambda _=False, n=full: self._on_std_3d(n))
             v3d.toolbar.add_action(act)
-        for axis in ("axial", "coronal", "sagittal"):
-            v3d.toolbar.add_action(self._plane_actions[axis])
 
     def _on_reset_3d(self):
         self.four_view.view3d.reset_view()
