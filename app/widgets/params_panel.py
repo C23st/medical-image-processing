@@ -25,6 +25,7 @@ class ParamsPanel(QTabWidget):
     window_changed = Signal(float, float)  # (window, level)
     enhance_apply = Signal(str, dict)      # (method_key, params)
     enhance_reset = Signal()
+    enhance_undo = Signal()
     segment_apply = Signal(str, dict)      # (method_key, params)
     segment_clear = Signal()
     reconstruct_apply = Signal(str, dict)  # (method_key, params)
@@ -117,9 +118,11 @@ class ParamsPanel(QTabWidget):
         layout.addWidget(box)
 
         self.apply_btn = QPushButton("应用增强")
+        self.undo_btn = QPushButton("撤回上一步")
         self.reset_btn = QPushButton("恢复原图")
         btn_row = QHBoxLayout()
         btn_row.addWidget(self.apply_btn)
+        btn_row.addWidget(self.undo_btn)
         btn_row.addWidget(self.reset_btn)
         layout.addLayout(btn_row)
 
@@ -131,6 +134,7 @@ class ParamsPanel(QTabWidget):
 
         self.method_combo.currentIndexChanged.connect(self._update_param_visibility)
         self.apply_btn.clicked.connect(self._emit_enhance_apply)
+        self.undo_btn.clicked.connect(self.enhance_undo)
         self.reset_btn.clicked.connect(self.enhance_reset)
         self._update_param_visibility()
 

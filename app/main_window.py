@@ -36,7 +36,7 @@ class MainWindow(QMainWindow):
         self._show_crosshair = False
         self._crosshair_action = None
         self._vtk_image = None
-        self._enhance_stack = []
+        self._enhance_undo = []  # [(label, VolumeData), ...] 增强历史 (限制条数)
 
         self._build_central()
         self._build_docks()
@@ -81,6 +81,7 @@ class MainWindow(QMainWindow):
         self.tree.series_selected.connect(self._on_series_selected)
         self.params.enhance_apply.connect(self._on_enhance_apply)
         self.params.enhance_reset.connect(self._on_enhance_reset)
+        self.params.enhance_undo.connect(self._on_enhance_undo)
         self.params.segment_apply.connect(self._on_segment_apply)
         self.params.segment_clear.connect(self._on_segment_clear)
         self.params.reconstruct_apply.connect(self._on_reconstruct_apply)
@@ -328,7 +329,7 @@ class MainWindow(QMainWindow):
         self._mask = None
         self._seed = None
         self._crosshair = None
-        self._enhance_stack = []
+        self._enhance_undo = []
         self._refresh_enhance_history()
         self.four_view.set_labelmap(None)
         self.four_view.view3d.clear_slice_planes()
@@ -371,21 +372,39 @@ class MainWindow(QMainWindow):
         self.set_volume(volume)
         if self._mask is not None:
             self.four_view.set_labelmap(self._mask)
-        self._enhance_stack.append(label)
+        self._enhance_undo.append((label, volume))
+        if len(self._enhance_undo) > 5:  # 限制内存
+            self._enhance_undo.pop(0)
         self._refresh_enhance_history()
         QApplication.restoreOverrideCursor()
         self.statusBar().showMessage(
-            f"增强完成: {label} (已叠加 {len(self._enhance_stack)} 种)", 5000
+            f"增强完成: {label} (已叠加 {len(self._enhance_undo)} 种)", 5000
         )
 
     def _refresh_enhance_history(self):
-        text = " → ".join(self._enhance_stack) if self._enhance_stack else "无"
+        labels = [lbl for lbl, _v in self._enhance_undo]
+        text = " → ".join(labels) if labels else "无"
         self.params.set_enhance_history(text)
+
+    def _on_enhance_undo(self):
+        """撤回上一步增强。"""
+        if not self._enhance_undo:
+            self.statusBar().showMessage("没有可撤回的增强步骤", 2000)
+            return
+        self._enhance_undo.pop()
+        prev = self._enhance_undo[-1][1] if self._enhance_undo else self._base_volume
+        if prev is None:
+            return
+        self.set_volume(prev)
+        if self._mask is not None:
+            self.four_view.set_labelmap(self._mask)
+        self._refresh_enhance_history()
+        self.statusBar().showMessage("已撤回上一步增强", 3000)
 
     def _on_enhance_reset(self):
         if self._base_volume is not None:
             self.set_volume(self._base_volume)
-            self._enhance_stack = []
+            self._enhance_undo = []
             self._refresh_enhance_history()
             self.statusBar().showMessage("已恢复原图", 3000)
 
