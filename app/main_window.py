@@ -36,6 +36,7 @@ class MainWindow(QMainWindow):
         self._show_crosshair = False
         self._crosshair_action = None
         self._vtk_image = None
+        self._enhance_stack = []
 
         self._build_central()
         self._build_docks()
@@ -327,6 +328,8 @@ class MainWindow(QMainWindow):
         self._mask = None
         self._seed = None
         self._crosshair = None
+        self._enhance_stack = []
+        self._refresh_enhance_history()
         self.four_view.set_labelmap(None)
         self.four_view.view3d.clear_slice_planes()
         for v in self.four_view.slice_views():
@@ -338,41 +341,52 @@ class MainWindow(QMainWindow):
             return
         QApplication.setOverrideCursor(Qt.WaitCursor)
         self.statusBar().showMessage("增强处理中...")
+        # 链式叠加: 基于当前显示结果继续增强 (支持多种增强组合)
+        source = self._volume if self._volume is not None else self._base_volume
         try:
-            data = enhance.apply(self._base_volume.data, method, params)
+            data = enhance.apply(source.data, method, params)
         except Exception as e:  # noqa: BLE001
             QApplication.restoreOverrideCursor()
             QMessageBox.warning(self, "增强", f"处理失败: {e}")
             return
 
-        base = self._base_volume
         label = enhance.METHODS[method][0]
         if enhance.preserves_range(method):
-            # 滤波类: 保持原始窗宽窗位 (HU 语义不变)
-            window, level = base.window, base.level
+            # 滤波类: 保持当前窗宽窗位 (链式叠加时沿用当前值)
+            window, level = source.window, source.level
         else:
             # 归一化类: 自动按新数据范围 (通常变为 255/128)
             window, level = None, None
         volume = VolumeData(
             data,
-            spacing=base.spacing,
-            origin=base.origin,
-            direction=base.direction,  # 增强只改数值, 保留方向矩阵保证坐标系一致
-            modality=base.modality,
-            patient=base.patient,
+            spacing=source.spacing,
+            origin=source.origin,
+            direction=source.direction,  # 增强只改数值, 保留方向矩阵保证坐标系一致
+            modality=source.modality,
+            patient=source.patient,
             window=window,
             level=level,
-            series_description=f"{base.series_description} [{label}]",
+            series_description=f"{source.series_description} [{label}]",
         )
         self.set_volume(volume)
         if self._mask is not None:
             self.four_view.set_labelmap(self._mask)
+        self._enhance_stack.append(label)
+        self._refresh_enhance_history()
         QApplication.restoreOverrideCursor()
-        self.statusBar().showMessage(f"增强完成: {label}", 5000)
+        self.statusBar().showMessage(
+            f"增强完成: {label} (已叠加 {len(self._enhance_stack)} 种)", 5000
+        )
+
+    def _refresh_enhance_history(self):
+        text = " → ".join(self._enhance_stack) if self._enhance_stack else "无"
+        self.params.set_enhance_history(text)
 
     def _on_enhance_reset(self):
         if self._base_volume is not None:
             self.set_volume(self._base_volume)
+            self._enhance_stack = []
+            self._refresh_enhance_history()
             self.statusBar().showMessage("已恢复原图", 3000)
 
     # ---- 分割 ----

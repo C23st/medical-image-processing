@@ -122,12 +122,21 @@ class ParamsPanel(QTabWidget):
         btn_row.addWidget(self.apply_btn)
         btn_row.addWidget(self.reset_btn)
         layout.addLayout(btn_row)
+
+        self.history_label = QLabel("已应用: 无")
+        self.history_label.setWordWrap(True)
+        self.history_label.setStyleSheet("color: #9aa0a6;")
+        layout.addWidget(self.history_label)
         layout.addStretch(1)
 
         self.method_combo.currentIndexChanged.connect(self._update_param_visibility)
         self.apply_btn.clicked.connect(self._emit_enhance_apply)
         self.reset_btn.clicked.connect(self.enhance_reset)
         self._update_param_visibility()
+
+    def set_enhance_history(self, text):
+        """显示已叠加的增强链 (如: 线性拉伸 → 伽马变换)。"""
+        self.history_label.setText(f"已应用: {text}")
 
     def _add_row(self, form, label, widget):
         form.addRow(label, widget)

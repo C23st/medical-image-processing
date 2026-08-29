@@ -375,18 +375,15 @@ class SliceViewWidget(QWidget):
     # ---- 十字准星 ----
     def _create_cross_actor(self):
         points = vtk.vtkPoints()
-        points.SetNumberOfPoints(4)
-        for i in range(4):
+        points.SetNumberOfPoints(8)
+        for i in range(8):
             points.SetPoint(i, 0.0, 0.0, 1.5)
-        l1 = vtk.vtkLine()
-        l1.GetPointIds().SetId(0, 0)
-        l1.GetPointIds().SetId(1, 1)
-        l2 = vtk.vtkLine()
-        l2.GetPointIds().SetId(0, 2)
-        l2.GetPointIds().SetId(1, 3)
         lines = vtk.vtkCellArray()
-        lines.InsertNextCell(l1)
-        lines.InsertNextCell(l2)
+        for i in range(4):
+            ln = vtk.vtkLine()
+            ln.GetPointIds().SetId(0, i * 2)
+            ln.GetPointIds().SetId(1, i * 2 + 1)
+            lines.InsertNextCell(ln)
         poly = vtk.vtkPolyData()
         poly.SetPoints(points)
         poly.SetLines(lines)
@@ -430,11 +427,17 @@ class SliceViewWidget(QWidget):
         wy = row * sp[1]
         w = cols * sp[0]
         h = rows * sp[1]
+        gap = 5.0  # 中心留空 (世界单位 mm), 避免线盖住中心点
         points = self._cross_actor.GetMapper().GetInput().GetPoints()
-        points.SetPoint(0, wx, 0.0, 1.5)
+        # 上/下/左/右四段, 各距中心留 gap 空隙
+        points.SetPoint(0, wx, wy + gap, 1.5)
         points.SetPoint(1, wx, h, 1.5)
-        points.SetPoint(2, 0.0, wy, 1.5)
-        points.SetPoint(3, w, wy, 1.5)
+        points.SetPoint(2, wx, 0.0, 1.5)
+        points.SetPoint(3, wx, wy - gap, 1.5)
+        points.SetPoint(4, 0.0, wy, 1.5)
+        points.SetPoint(5, wx - gap, wy, 1.5)
+        points.SetPoint(6, wx + gap, wy, 1.5)
+        points.SetPoint(7, w, wy, 1.5)
         points.Modified()
         self._cross_actor.VisibilityOn()
         self.render()
