@@ -425,12 +425,13 @@ class MainWindow(QMainWindow):
 
     # ---- 三维重建 ----
     def _on_reconstruct_apply(self, method, params):
-        if self._volume is None:
+        # 重建基于原始数据 (与分割一致): 增强只影响显示, 不影响重建, 阈值保持 HU 语义
+        if self._base_volume is None:
             return
         QApplication.setOverrideCursor(Qt.WaitCursor)
         self.statusBar().showMessage("三维重建处理中...")
         try:
-            image = self._volume.to_vtk_image(apply_direction=True)
+            image = self._base_volume.to_vtk_image(apply_direction=True)
             if method == "surface":
                 threshold = params.get("threshold", 300.0)
                 self.four_view.view3d.set_surface(image, threshold)
@@ -444,7 +445,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "三维重建", f"重建失败: {e}")
             return
         QApplication.restoreOverrideCursor()
-        self.statusBar().showMessage(f"重建完成: {label}", 5000)
+        self.statusBar().showMessage(f"重建完成: {label} (基于原始数据)", 5000)
 
     def _on_reconstruct_clear(self):
         self.four_view.view3d.clear_reconstruction()
