@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import vtk
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtWidgets import QSlider, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QSlider, QVBoxLayout, QWidget
 from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
 from vtkmodules.util import numpy_support
 
@@ -322,9 +322,13 @@ class SliceViewWidget(QWidget):
         if self._data is None or self._pan_last is None:
             return
         try:
+            # 同样按 QVTK 约定做 DPI 缩放, 否则 150% 缩放下平移量会偏大
+            scale = QApplication.instance().devicePixelRatio()
             h = self.vtk_widget.height()
-            x1, y1 = int(pos.x()), int(h - pos.y())
-            x2, y2 = int(self._pan_last.x()), int(h - self._pan_last.y())
+            x1, y1 = int(round(pos.x() * scale)), int(round((h - pos.y() - 1) * scale))
+            x2, y2 = int(round(self._pan_last.x() * scale)), int(
+                round((h - self._pan_last.y() - 1) * scale)
+            )
             self.renderer.SetDisplayPoint(x1, y1, 0.0)
             self.renderer.DisplayToWorld()
             wx1, wy1, _wz1, _w1 = self.renderer.GetWorldPoint()
@@ -354,13 +358,20 @@ class SliceViewWidget(QWidget):
 
     # ---- 拾取 ----
     def _pick_from_qt(self, pos):
-        """Qt 左键按下 -> 拾取体素 (z,y,x) 并发射 picked。"""
+        """Qt 左键按下 -> 拾取体素 (z,y,x) 并发射 picked。
+
+        坐标换算必须与 QVTK 内部完全一致 (Qt 逻辑坐标 -> 渲染窗口像素,
+        含 DPI 缩放 + y 翻转): QVTK 悬停路径用的是
+        SetEventInformation(x*scale, (height-y-1)*scale);
+        之前这里漏了 DPI 缩放, 150% 缩放下拾取点会偏出鼠标位置。
+        """
         if self._data is None:
             return
         try:
-            x = int(pos.x())
-            y_disp = int(self.vtk_widget.height() - pos.y())  # Qt y 向下 -> VTK 显示 y 向上
-            self._interactor.SetEventPosition(x, y_disp)
+            scale = QApplication.instance().devicePixelRatio()
+            x_disp = int(round(pos.x() * scale))
+            y_disp = int(round((self.vtk_widget.height() - pos.y() - 1) * scale))
+            self._interactor.SetEventPosition(x_disp, y_disp)
             rc = self._mouse_to_rc()
             if rc is None:
                 return
