@@ -129,7 +129,7 @@ class ParamsPanel(QTabWidget):
         self.sigma_space_spin.setSingleStep(1.0)
         self.sigma_color_spin = QDoubleSpinBox()
         self.sigma_color_spin.setRange(1.0, 255.0)
-        self.sigma_color_spin.setValue(75.0)
+        self.sigma_color_spin.setValue(15.0)
         self.sigma_color_spin.setSingleStep(5.0)
 
         # 同态滤波参数

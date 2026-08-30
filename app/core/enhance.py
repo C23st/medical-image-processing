@@ -62,9 +62,16 @@ def hist_equalize(img):
     return _normalize(exposure.equalize_hist(_to_unit(img)))
 
 
-def clahe(img, clip_limit=0.02):
-    """对比度受限自适应直方图均衡 (CLAHE)。"""
-    return _normalize(exposure.equalize_adapthist(_to_unit(img), clip_limit=clip_limit))
+def clahe(img, clip_limit=0.02, glo=None, ghi=None):
+    """对比度受限自适应直方图均衡 (CLAHE)。
+
+    glo/ghi 为全卷全局范围 (由 apply 注入), 避免逐层缩放不一致产生层间条纹。
+    """
+    if glo is not None and ghi is not None and ghi - glo > 1e-8:
+        u = ((img - glo) / (ghi - glo)).astype(np.float32)
+    else:
+        u = _to_unit(img)
+    return exposure.equalize_adapthist(u, clip_limit=clip_limit).astype(np.float32)
 
 
 # ---- 空间滤波 (保持灰度范围) ----
@@ -114,14 +121,20 @@ def fft_filter(img, kind="lowpass", cutoff=0.1, width=0.1, order=2):
 
     fshift = np.fft.fftshift(np.fft.fft2(img)) * mask
     out = np.real(np.fft.ifft2(np.fft.ifftshift(fshift)))
-    return _normalize(out)
+    return out.astype(np.float32)  # 原始值, 由 apply 全局归一化 (避免层间条纹)
 
 
 # ---- 双边滤波 (保边去噪, 保持原始灰度范围) ----
-def bilateral(img, sigma_space=9.0, sigma_color=75.0):
-    """双边滤波 (OpenCV): 去噪同时保留边缘; 保持原始 HU 范围。"""
+def bilateral(img, sigma_space=9.0, sigma_color=15.0, glo=None, ghi=None):
+    """双边滤波 (OpenCV): 去噪同时保留边缘; 保持原始灰度范围。
+
+    glo/ghi 为全卷全局范围 (由 apply 注入), 保证各层使用同一缩放, 避免层间条纹。
+    """
     img = img.astype(np.float32)
-    lo, hi = float(img.min()), float(img.max())
+    if glo is not None and ghi is not None and ghi - glo > 1e-8:
+        lo, hi = float(glo), float(ghi)
+    else:
+        lo, hi = float(img.min()), float(img.max())
     if hi - lo < 1e-8:
         return img
     u = np.clip((img - lo) / (hi - lo) * 255.0, 0, 255).astype(np.uint8)
@@ -144,7 +157,7 @@ def homomorphic(img, gamma_low=0.4, gamma_high=1.5, cutoff=0.1):
     fshift = np.fft.fftshift(np.fft.fft2(np.log(shifted))) * h
     log_out = np.clip(np.real(np.fft.ifft2(np.fft.ifftshift(fshift))), -50.0, 50.0)
     out = np.exp(log_out) - 1.0
-    return _normalize(out)
+    return out.astype(np.float32)  # 原始值, 由 apply 全局归一化 (避免层间条纹)
 
 
 # ---- 方法注册表 ----
@@ -160,12 +173,18 @@ METHODS = {
     "gaussian": ("高斯滤波", gaussian_filter, {"sigma": 1.0}),
     "sharpen": ("锐化", sharpen, {"amount": 1.0}),
     "fft": ("频域滤波", fft_filter, {"kind": "lowpass", "cutoff": 0.1, "width": 0.1}),
-    "bilateral": ("双边滤波", bilateral, {"sigma_space": 9.0, "sigma_color": 75.0}),
+    "bilateral": ("双边滤波", bilateral, {"sigma_space": 9.0, "sigma_color": 15.0}),
     "homomorphic": ("同态滤波", homomorphic, {"gamma_low": 0.4, "gamma_high": 1.5, "cutoff": 0.1}),
 }
 
 # 逐切片处理的方法 (滤波/CLAHE 保持 2D 语义且更快)
 _SLICE_WISE = {"clahe", "mean", "median", "gaussian", "sharpen", "fft", "bilateral", "homomorphic"}
+
+# 需要全卷全局归一化的方法 (避免逐层 min-max 不一致导致冠状/矢状面条纹)
+_GLOBAL_NORMALIZE = {"clahe", "fft", "homomorphic"}
+
+# 需要全卷全局范围 (缩放映射一致) 的方法
+_GLOBAL_RANGE = {"bilateral", "clahe"}
 
 # 保持原始灰度 (HU) 范围的方法: 增强后窗宽窗位应沿用原始值
 _PRESERVE_RANGE = {"mean", "median", "gaussian", "sharpen", "bilateral"}
@@ -191,8 +210,14 @@ def apply(data, method, params=None):
     data = np.asarray(data, dtype=np.float32)
 
     if method in _SLICE_WISE:
+        if method in _GLOBAL_RANGE:
+            # 注入全卷全局范围, 保证各层缩放一致 (避免层间条纹)
+            p["glo"] = float(data.min())
+            p["ghi"] = float(data.max())
         out = np.empty_like(data, dtype=np.float32)
         for z in range(data.shape[0]):
             out[z] = func(data[z], **p)
+        if method in _GLOBAL_NORMALIZE:
+            out = _normalize(out)  # 全卷全局归一化
         return out
     return func(data, **p).astype(np.float32)
