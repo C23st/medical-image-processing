@@ -94,6 +94,6 @@ python main.py
 
 ## 🔧 其他
 
-- **打包 exe**：方案见 `docs/packaging_plan.md`；一键构建脚本 `build_exe.bat`（配置 `MedImg.spec`，产物 `dist\MedImg\MedImg.exe`）
+- **打包 exe**：方案见 `docs/packaging_plan.md`；一键构建 `build_installer.bat` → 绿色版 `dist\MedImg\MedImg.exe` + 安装包 `dist\MedImg-Setup.exe`（配置 `MedImg.spec` + `installer.iss`）
 - **手动测试指南**：`docs/manual_test.md`
 - 本项目为课程期末作业，仅供学习交流。

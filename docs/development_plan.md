@@ -149,7 +149,7 @@ app/
 | P4 | 图像分割 + 标签叠加 + Dice | ✅ |
 | P5 | 三维重建（面绘制+体绘制） | ✅ |
 | P6 | 三维中切片位置联动（切平面） | ✅ |
-| P7 | PyInstaller 打包 exe + 全流程测试 + 文档 | 🔄 打包准备完成（MedImg.spec / build_exe.bat / --selftest，见 docs/packaging_plan.md）；待实际构建 |
+| P7 | PyInstaller 打包 exe + 全流程测试 + 文档 | 🔄 打包准备完成（MedImg.spec / installer.iss / build_installer.bat / --selftest，见 docs/packaging_plan.md）；交付形态=绿色版 + Inno Setup 安装包；待实际构建 |
 
 **额外已完成功能**：十字准星联动（Shift+移动，RAS 定位）、十字准星定位线（中心留空）、实时悬停坐标、Ctrl+滚轮缩放、中键平移、视图左上角图标工具栏、切片视图底部滑动条快速翻层、3D 标准视角切换（前/后/右/左/上/下）、3D 切平面显示分割叠加、增强链式叠加与撤回、文件菜单最近打开。（注：切片联动、同态滤波、自动种子点曾实现后按需求移除。）
 
