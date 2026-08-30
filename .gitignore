@@ -8,10 +8,9 @@ venv/
 # 测试数据 (体积大, 不入库; 需要时自行用 Git LFS 或拷贝)
 test_data/
 
-# PyInstaller 构建产物
+# PyInstaller 构建产物 (MedImg.spec 需要入库, 不忽略)
 build/
 dist/
-*.spec
 
 # 截图 / 日志 / 临时
 scripts/*.png
