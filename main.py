@@ -12,20 +12,46 @@ from app.main_window import MainWindow
 from app.style import apply_dark_theme
 
 
+_SELFTEST_LOG = None  # 记录到 %TEMP%\MedImg_selftest.txt, 供无控制台 exe 验证
+
+
 def _selftest():
     """打包自检: 不启动 GUI, 仅验证全部模块/依赖/DLL 能否加载。
 
-    用法: MedImg.exe --selftest   (输出 SELFTEST OK 即依赖齐全)
+    用法: MedImg.exe --selftest
+    结果: 退出码 0 = 成功; 1 = 失败。同时写入 %TEMP%\\MedImg_selftest.txt
+          (无控制台 exe 的 stdout 为 None, print 需容错)。
     """
-    import app.main_window  # noqa: F401  触发全部视图/组件模块导入
-    import app.core.dicom_loader  # noqa: F401
-    import app.core.enhance  # noqa: F401
-    import app.core.segment  # noqa: F401
-    import app.core.volume  # noqa: F401
+    import tempfile
+    from pathlib import Path
 
-    app = QApplication.instance() or QApplication(sys.argv)
-    print("SELFTEST OK: 所有模块导入成功, Qt 初始化完成")
-    return 0
+    global _SELFTEST_LOG
+    _SELFTEST_LOG = str(Path(tempfile.gettempdir()) / "MedImg_selftest.txt")
+
+    def log(msg):
+        try:
+            print(msg)
+        except Exception:
+            pass
+        try:
+            with open(_SELFTEST_LOG, "w", encoding="utf-8") as f:
+                f.write(msg + "\n")
+        except Exception:
+            pass
+
+    try:
+        import app.main_window  # noqa: F401  触发全部视图/组件模块导入
+        import app.core.dicom_loader  # noqa: F401
+        import app.core.enhance  # noqa: F401
+        import app.core.segment  # noqa: F401
+        import app.core.volume  # noqa: F401
+
+        app = QApplication.instance() or QApplication(sys.argv)
+        log("SELFTEST OK: 所有模块导入成功, Qt 初始化完成")
+        return 0
+    except Exception as e:  # noqa: BLE001
+        log(f"SELFTEST FAIL: {type(e).__name__}: {e}")
+        return 1
 
 
 def main():

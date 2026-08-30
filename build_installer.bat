@@ -10,6 +10,7 @@ cd /d "%~dp0"
 set PY=D:\Anaconda_Envs\medimg\python.exe
 set ISCC=C:\Program Files (x86)\Inno Setup 6\ISCC.exe
 if not exist "%ISCC%" set ISCC=C:\Program Files\Inno Setup 6\ISCC.exe
+if not exist "%ISCC%" set ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe
 
 if not exist "%PY%" (
     echo [错误] 未找到 Python: %PY%

@@ -30,7 +30,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; 绿色版软件, 安装目录由用户自选, 不写系统注册表 (除卸载信息)
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+; 官方安装包不含中文(非官方翻译), 已内置到仓库 Languages\ 目录保证可复现
+Name: "chinesesimplified"; MessagesFile: "Languages\ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加任务:"; Flags: unchecked

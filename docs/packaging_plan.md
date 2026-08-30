@@ -41,23 +41,17 @@
 - **console=False**: 发布版不弹控制台
 - **upx=False**, **name=MedImg**（ASCII 名, 避免中文路径兼容问题; 窗口标题本身是中文, 不受影响）
 
-## 4. 体积预估
+## 4. 体积（实测 2026 构建）
 
-安装体积实测 (site-packages):
+| 产物 | 大小 |
+|------|------|
+| 绿色版 `dist\MedImg\`（839 个文件） | **650 MB** |
+| 安装包 `dist\MedImg-Setup.exe`（LZMA2 压缩） | **132 MB** |
 
-| 包 | 安装体积 |
-|----|---------|
-| PySide6 (Essentials+Addons 合并目录) | ~632 MB |
-| cv2 | ~112 MB |
-| scipy | ~111 MB |
-| vtkmodules | ~50 MB |
-| numpy | ~28 MB |
-| skimage | ~26 MB |
-| pydicom | ~19 MB |
-| shiboken6 | ~3 MB |
+安装包约为绿色版 1/5，适合邮件/网盘交付；绿色版适合 U 盘直拷。
 
-**预估 dist\MedImg 约 600~900 MB**（PySide6 hook 会按需裁掉部分 Addons; 实际以构建后 `dist` 实测为准）。
-如果偏大, 后续可选瘦身（见 §8）。
+> 构建工具链: PyInstaller 6.22.2 + hooks-contrib 2026.6 + Inno Setup 6.7.3（本机以**用户级**安装于 `%LOCALAPPDATA%\Programs\Inno Setup 6`）。
+> 中文语言文件为非官方翻译，已**内置到仓库 `Languages\ChineseSimplified.isl`**（官方安装包不含），保证任何机器可复现构建。
 
 ## 5. 构建步骤
 
@@ -75,8 +69,9 @@
 ## 6. 验证方案
 
 1. **依赖自检（自动化, 可在无显示器环境跑）**: `dist\MedImg\MedImg.exe --selftest`
-   - 源码 `main.py` 新增 `--selftest`: 导入全部核心模块 + 创建 QApplication, 输出 `SELFTEST OK` 退出码 0
-   - 可捕获 90% 打包错误（缺 DLL / 缺模块 / hook 失败）
+   - 源码 `main.py` 新增 `--selftest`: 导入全部核心模块 + 创建 QApplication
+   - 无控制台 exe 的 stdout 为 None, 故自检把结果同时写入 `%TEMP%\MedImg_selftest.txt`（`SELFTEST OK` + 退出码 0）
+   - **已实测通过** ✅
 2. **GUI 手动验证（需在真实桌面, 由使用者执行）**: 打开 DICOM 病人 → 翻层/缩放/十字联动 → 增强(取 1~2 种) → 分割 → 三维重建 + 切平面 → 退出
 3. 若 GUI 有问题再构建 `console=True` 的调试版看 Traceback
 
