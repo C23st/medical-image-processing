@@ -132,20 +132,6 @@ class ParamsPanel(QTabWidget):
         self.sigma_color_spin.setValue(15.0)
         self.sigma_color_spin.setSingleStep(5.0)
 
-        # 同态滤波参数
-        self.gamma_low_spin = QDoubleSpinBox()
-        self.gamma_low_spin.setRange(0.05, 1.0)
-        self.gamma_low_spin.setValue(0.4)
-        self.gamma_low_spin.setSingleStep(0.05)
-        self.gamma_high_spin = QDoubleSpinBox()
-        self.gamma_high_spin.setRange(1.0, 4.0)
-        self.gamma_high_spin.setValue(1.5)
-        self.gamma_high_spin.setSingleStep(0.1)
-        self.homo_cutoff_spin = QDoubleSpinBox()
-        self.homo_cutoff_spin.setRange(0.01, 0.5)
-        self.homo_cutoff_spin.setValue(0.1)
-        self.homo_cutoff_spin.setSingleStep(0.01)
-
         self._param_rows = {
             "gamma": self._add_row(form, "γ (gamma)", self.gamma_spin),
             "clip": self._add_row(form, "clip_limit", self.clip_spin),
@@ -157,9 +143,6 @@ class ParamsPanel(QTabWidget):
             "width": self._add_row(form, "带宽", self.width_spin),
             "sigma_space": self._add_row(form, "σ空间(px)", self.sigma_space_spin),
             "sigma_color": self._add_row(form, "σ灰度", self.sigma_color_spin),
-            "gamma_low": self._add_row(form, "γ低", self.gamma_low_spin),
-            "gamma_high": self._add_row(form, "γ高", self.gamma_high_spin),
-            "homo_cutoff": self._add_row(form, "截止频率", self.homo_cutoff_spin),
         }
         layout.addWidget(box)
 
@@ -202,7 +185,6 @@ class ParamsPanel(QTabWidget):
         "sharpen": {"amount"},
         "fft": {"kind", "cutoff", "width"},
         "bilateral": {"sigma_space", "sigma_color"},
-        "homomorphic": {"gamma_low", "gamma_high", "homo_cutoff"},
     }
 
     def _update_param_visibility(self):
@@ -234,12 +216,6 @@ class ParamsPanel(QTabWidget):
             params = {
                 "sigma_space": self.sigma_space_spin.value(),
                 "sigma_color": self.sigma_color_spin.value(),
-            }
-        elif key == "homomorphic":
-            params = {
-                "gamma_low": self.gamma_low_spin.value(),
-                "gamma_high": self.gamma_high_spin.value(),
-                "cutoff": self.homo_cutoff_spin.value(),
             }
         self.enhance_apply.emit(key, params)
 

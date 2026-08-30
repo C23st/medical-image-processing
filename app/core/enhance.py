@@ -143,23 +143,6 @@ def bilateral(img, sigma_space=9.0, sigma_color=15.0, glo=None, ghi=None):
     return (out.astype(np.float32) / 255.0 * (hi - lo) + lo).astype(np.float32)
 
 
-# ---- 同态滤波 ----
-def homomorphic(img, gamma_low=0.4, gamma_high=1.5, cutoff=0.1):
-    """同态滤波: 压缩动态范围并增强对比度 (对数域 + 高通增强 + 指数还原)。"""
-    img = img.astype(np.float32)
-    shifted = img - img.min() + 1.0  # 平移到正区间, 避免对负数取对数
-    rows, cols = img.shape
-    cy, cx = rows // 2, cols // 2
-    yy, xx = np.mgrid[0:rows, 0:cols]
-    d2 = (xx - cx) ** 2 + (yy - cy) ** 2
-    d0 = max(rows, cols) * max(cutoff, 1e-3)
-    h = (gamma_high - gamma_low) * (1.0 - np.exp(-d2 / (d0 * d0))) + gamma_low
-    fshift = np.fft.fftshift(np.fft.fft2(np.log(shifted))) * h
-    log_out = np.clip(np.real(np.fft.ifft2(np.fft.ifftshift(fshift))), -50.0, 50.0)
-    out = np.exp(log_out) - 1.0
-    return out.astype(np.float32)  # 原始值, 由 apply 全局归一化 (避免层间条纹)
-
-
 # ---- 方法注册表 ----
 # key -> (显示名, 函数, 默认参数)
 METHODS = {
@@ -174,14 +157,13 @@ METHODS = {
     "sharpen": ("锐化", sharpen, {"amount": 1.0}),
     "fft": ("频域滤波", fft_filter, {"kind": "lowpass", "cutoff": 0.1, "width": 0.1}),
     "bilateral": ("双边滤波", bilateral, {"sigma_space": 9.0, "sigma_color": 15.0}),
-    "homomorphic": ("同态滤波", homomorphic, {"gamma_low": 0.4, "gamma_high": 1.5, "cutoff": 0.1}),
 }
 
 # 逐切片处理的方法 (滤波/CLAHE 保持 2D 语义且更快)
-_SLICE_WISE = {"clahe", "mean", "median", "gaussian", "sharpen", "fft", "bilateral", "homomorphic"}
+_SLICE_WISE = {"clahe", "mean", "median", "gaussian", "sharpen", "fft", "bilateral"}
 
 # 需要全卷全局归一化的方法 (避免逐层 min-max 不一致导致冠状/矢状面条纹)
-_GLOBAL_NORMALIZE = {"clahe", "fft", "homomorphic"}
+_GLOBAL_NORMALIZE = {"clahe", "fft"}
 
 # 需要全卷全局范围 (缩放映射一致) 的方法
 _GLOBAL_RANGE = {"bilateral", "clahe"}
@@ -217,6 +199,13 @@ def apply(data, method, params=None):
         out = np.empty_like(data, dtype=np.float32)
         for z in range(data.shape[0]):
             out[z] = func(data[z], **p)
+        if method == "clahe":
+            # 逐层均值对齐: 消除各层自适应均衡后的亮度条带 (去条纹)
+            gm = float(out.mean())
+            for z in range(out.shape[0]):
+                m = float(out[z].mean())
+                if m > 1e-6:
+                    out[z] *= gm / m
         if method in _GLOBAL_NORMALIZE:
             out = _normalize(out)  # 全卷全局归一化
         return out
