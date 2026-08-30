@@ -29,7 +29,7 @@
 | scikit-image (exposure/filters) | CLAHE/Otsu 等 | ✅ | hook-skimage 按子模块收集 |
 | opencv-python (cv2) | 双边滤波 | ✅ | hook-cv2 存在 |
 | pydicom | DICOM 解析 | ✅ | hook-pydicom 存在 |
-| matplotlib / Pillow / SimpleITK | requirements 里但**未被 app import** | ❌ 排除 | 在 spec 的 excludes 中明确排除, 减小体积 |
+| matplotlib / Pillow / SimpleITK | 从未被 app import（已从 requirements 移除） | ❌ 排除 | 在 spec 的 excludes 中明确排除, 减小体积 |
 
 **运行时数据文件**: 无。样式为纯代码; 最近打开列表写在用户目录 `~/.medimg_recent.json`;
 测试数据 `test_data/` 外置, **不打进 exe**（体积大且属于用户数据）。
