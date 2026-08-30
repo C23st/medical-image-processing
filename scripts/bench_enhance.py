@@ -16,8 +16,7 @@ img = (rng.normal(0, 60, (512, 512)) + np.linspace(-100, 100, 512)[None, :]).ast
 cases = [
     ("fft 低通", "fft", {"kind": "lowpass", "cutoff": 0.1}),
     ("fft 高通", "fft", {"kind": "highpass", "cutoff": 0.1}),
-    ("双边滤波", "bilateral", {"sigma_space": 9, "sigma_color": 75}),
-    ("同态滤波", "homomorphic", {"gamma_low": 0.4, "gamma_high": 1.5, "cutoff": 0.1}),
+    ("双边滤波", "bilateral", {"sigma_space": 9, "sigma_color": 15}),
 ]
 for name, key, args in cases:
     t = time.time()
