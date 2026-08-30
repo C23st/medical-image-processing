@@ -2,7 +2,7 @@
 """医学图像处理平台 - PyInstaller 打包配置 (onedir / windowed)。
 
 用法: build_exe.bat 或:
-  D:\Anaconda_Envs\medimg\python.exe -m PyInstaller --noconfirm --clean MedImg.spec
+  python -m PyInstaller --noconfirm --clean MedImg.spec
 
 产物: dist\MedImg\MedImg.exe  (整个文件夹为绿色版, 可整体拷贝/压缩分发)
 验证: dist\MedImg\MedImg.exe --selftest  -> 输出 SELFTEST OK

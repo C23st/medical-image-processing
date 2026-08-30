@@ -1,7 +1,7 @@
 """P5 三维重建测试 (无 GL): 面绘制管线输出 / 体绘制构建 / 参数面板集成。
 
 用法:
-    D:\\Anaconda_Envs\\medimg\\python.exe scripts/test_reconstruct.py
+    python scripts/test_reconstruct.py
 """
 import os
 import sys

@@ -1,7 +1,7 @@
 """解析 test_data 下的 DICOM 数据: 按 病人/检查/序列 分组并报告体数据信息。
 
 用法:
-    D:\\Anaconda_Envs\\medimg\\python.exe scripts/inspect_dicom.py
+    python scripts/inspect_dicom.py
 """
 import os
 import sys

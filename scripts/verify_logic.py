@@ -1,7 +1,7 @@
 """无 GL 依赖的逻辑校验: 导入全部模块 + 验证体数据/切片管道。
 
 用法:
-    D:\\Anaconda_Envs\\medimg\\python.exe scripts/verify_logic.py
+    python scripts/verify_logic.py
 """
 import os
 import sys

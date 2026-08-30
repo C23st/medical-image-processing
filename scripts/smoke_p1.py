@@ -1,7 +1,7 @@
 """P1 冒烟测试: 实例化主窗口, 渲染并截图。
 
 需在带显示器的桌面会话运行 (VTK 需要 OpenGL 上下文):
-    D:\\Anaconda_Envs\\medimg\\python.exe scripts/smoke_p1.py
+    python scripts/smoke_p1.py
 """
 import os
 import sys

@@ -58,7 +58,7 @@
 ```
 只出绿色版:   双击 build_exe.bat
 绿色版+安装包: 双击 build_installer.bat   (自动: 清理 → PyInstaller → ISCC installer.iss)
-  或手动: D:\Anaconda_Envs\medimg\python.exe -m PyInstaller --noconfirm --clean MedImg.spec
+  或手动: python -m PyInstaller --noconfirm --clean MedImg.spec
           "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 ```
 

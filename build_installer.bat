@@ -8,13 +8,16 @@ rem ============================================================
 cd /d "%~dp0"
 
 set PY=D:\Anaconda_Envs\medimg\python.exe
+if not exist "%PY%" (
+    where python >nul 2>nul && set PY=python
+)
 set ISCC=C:\Program Files (x86)\Inno Setup 6\ISCC.exe
 if not exist "%ISCC%" set ISCC=C:\Program Files\Inno Setup 6\ISCC.exe
 if not exist "%ISCC%" set ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe
 
-if not exist "%PY%" (
-    echo [错误] 未找到 Python: %PY%
-    echo 请确认 conda 环境 medimg 存在, 或修改本脚本开头的 PY 变量
+if "%PY%"=="" (
+    echo [错误] 未找到 Python 解释器。
+    echo 请修改本脚本开头的 PY 变量为你的 Python 环境, 或先 conda activate medimg 再运行。
     pause
     exit /b 1
 )

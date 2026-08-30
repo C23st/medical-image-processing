@@ -1,7 +1,7 @@
 """P4 分割模块测试 (无 GL): 算法 + SEG 真值映射 + 纯函数切片逻辑。
 
 用法:
-    D:\\Anaconda_Envs\\medimg\\python.exe scripts/test_segment.py
+    python scripts/test_segment.py
 """
 import os
 import sys

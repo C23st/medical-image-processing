@@ -31,7 +31,7 @@
 | 医学处理 | SimpleITK 2.5 | 重采样等（已装备用） |
 | 打包 | PyInstaller 6.22 | 生成 exe（P7） |
 
-**环境**: conda `medimg`（位于 `D:\Anaconda_Envs\medimg`），依赖见 `requirements.txt`。
+**环境**: conda `medimg`（本机位于 `D:\Anaconda_Envs\medimg`，其他机器按实际安装位置调整），依赖见 `requirements.txt`。
 **启动**: 双击 `run.bat`（自动用 medimg 环境）。
 
 ## 3. 总体架构

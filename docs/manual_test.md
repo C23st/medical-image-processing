@@ -4,7 +4,7 @@
 
 ## 0. 准备
 
-1. 启动: 双击 `run.bat`（或 `D:\Anaconda_Envs\medimg\python.exe main.py`）
+1. 启动: 双击 `run.bat`，或使用你的 Python 环境运行 `python main.py`（需已安装 requirements.txt 依赖）
 2. 菜单「文件 → 打开 DICOM 文件夹」→ 选 `test_data\PANCREAS_0001`（**建议一次只加载单个病人文件夹**，避免同时加载两个病人导致内存不足）
 3. 左侧数据树出现序列，双击「序列: Pancreas」加载 CT
 4. 确认三个切片视图显示腹部 CT（Axial 119/239、Coronal/Sagittal 255/511）

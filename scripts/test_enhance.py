@@ -1,7 +1,7 @@
 """增强模块测试 (无 GL): 算法 + 参数面板构建。
 
 用法:
-    D:\\Anaconda_Envs\\medimg\\python.exe scripts/test_enhance.py
+    python scripts/test_enhance.py
 """
 import os
 import sys

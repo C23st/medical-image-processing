@@ -1,7 +1,7 @@
 """DICOM 加载测试 (无 GL): 加载 test_data 并校验体数据。
 
 用法:
-    D:\\Anaconda_Envs\\medimg\\python.exe scripts/test_dicom_load.py
+    python scripts/test_dicom_load.py
 """
 import os
 import sys
